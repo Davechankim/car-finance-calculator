@@ -84,4 +84,27 @@ describe('exitOptionsAt (스펙 §4.4)', () => {
     const d2 = exitOptionsAt(two, common, 24).best.cost - sunkAt(two, common, 24);
     expect(d2).toBeCloseTo(d1 * 2, 4);
   });
+
+  it('금융리스 earlyDiscount 부분 감면: 잔여채무에서 그만큼만 차감', () => {
+    const base = baseItem('finlease');
+    const disc = baseItem('finlease', { exit: { ...base.exit, earlyDiscount: 1_000_000 } });
+    const d0 = exitOptionsAt(base, common, 24).options.find((o) => o.kind === 'settleSell')!.cost;
+    const d1 = exitOptionsAt(disc, common, 24).options.find((o) => o.kind === 'settleSell')!.cost;
+    expect(d0 - d1).toBeCloseTo(1_000_000, 4);
+  });
+
+  it('운용리스 만기: [반납, 인수후매각] 2옵션 중 최소 선택', () => {
+    const item = baseItem('oplease'); // 만기 시세 2,088만 > 잔존 1,200만 → 인수후매각 유리
+    const r = exitOptionsAt(item, common, 48);
+    expect(r.options.map((o) => o.kind).sort()).toEqual(['buyoutSell', 'return']);
+    expect(r.best.kind).toBe('buyoutSell');
+  });
+
+  it('초과주행 위약금은 반납 계열 비용에 가산', () => {
+    const base = baseItem('rent');
+    const mp = baseItem('rent', { exit: { ...base.exit, mileagePenalty: 700_000 } });
+    const c0 = exitOptionsAt(base, common, 24).options.find((o) => o.kind === 'terminate')!.cost;
+    const c1 = exitOptionsAt(mp, common, 24).options.find((o) => o.kind === 'terminate')!.cost;
+    expect(c1 - c0).toBeCloseTo(700_000, 4);
+  });
 });
