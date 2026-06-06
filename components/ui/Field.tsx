@@ -29,7 +29,10 @@ export function NumInput(props: {
       <input
         type="number" value={props.value} step={props.step ?? 0.1}
         min={props.min} max={props.max}
-        onChange={(e) => props.onChange(Number(e.target.value))}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (!Number.isNaN(v)) props.onChange(v); // 부분 입력('-', '3e')의 NaN이 엔진으로 전파되는 것 차단
+        }}
       />
     </div>
   );
@@ -84,7 +87,10 @@ export function PctOrAmountInput(props: {
         {props.mv.mode === 'pct' ? (
           <input
             style={{ width: 70 }} type="number" value={props.mv.value} min={0} max={100}
-            onChange={(e) => props.onChange({ mode: 'pct', value: Number(e.target.value) })}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (!Number.isNaN(v)) props.onChange({ mode: 'pct', value: v });
+            }}
           />
         ) : (
           <input

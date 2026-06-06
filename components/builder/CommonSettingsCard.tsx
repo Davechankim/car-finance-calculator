@@ -53,10 +53,11 @@ export function CommonSettingsCard(props: {
       </div>
       <div className="section-label">비교 시점 시나리오</div>
       {common.scenarios.map((s, i) => (
-        <div className="row" key={i}>
+        <div className="row" key={s.atMonths}>
           <NumInput
             label={`시점 ${i + 1}`} suffix="개월 후" step={3} min={3} max={120} value={s.atMonths}
             onChange={(atMonths) => {
+              if (common.scenarios.some((x, j) => j !== i && x.atMonths === atMonths)) return;
               const scenarios = common.scenarios.map((x, j) =>
                 j === i ? { atMonths, label: `${Math.round(atMonths / 12 * 10) / 10}년 후` } : x);
               set({ scenarios });
@@ -67,9 +68,14 @@ export function CommonSettingsCard(props: {
       ))}
       <button
         className="btn ghost"
-        onClick={() => set({
-          scenarios: [...common.scenarios, { atMonths: 12, label: '1년 후' }],
-        })}
+        onClick={() => {
+          // 기존 시점과 겹치지 않는 다음 시점(3개월 단위) 자동 선택
+          let at = 12;
+          while (common.scenarios.some((s) => s.atMonths === at)) at += 3;
+          set({
+            scenarios: [...common.scenarios, { atMonths: at, label: `${Math.round((at / 12) * 10) / 10}년 후` }],
+          });
+        }}
       >＋ 시나리오 추가</button>
     </div>
   );
