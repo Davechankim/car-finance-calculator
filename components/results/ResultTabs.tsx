@@ -26,13 +26,14 @@ export function ResultTabs(props: { state: ComparisonState; result: CompareResul
   const [tab, setTab] = useState<TabKey>('summary');
   const [norm, setNorm] = useState<Norm>('total');
   const single = props.state.items.length === 1;
+  const effectiveTab = single && tab === 'scenario' ? 'summary' : tab;
   return (
     <>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 0 }}>
           <div className="tabs">
             {TABS.filter((t) => !(single && t.key === 'scenario')).map((t) => (
-              <button key={t.key} className={`tab ${tab === t.key ? 'on' : ''}`} onClick={() => setTab(t.key)}>
+              <button key={t.key} className={`tab ${effectiveTab === t.key ? 'on' : ''}`} onClick={() => setTab(t.key)}>
                 {t.label}
               </button>
             ))}
@@ -48,11 +49,11 @@ export function ResultTabs(props: { state: ComparisonState; result: CompareResul
           />
         </div>
       </div>
-      {tab === 'summary' && <SummaryTab {...props} norm={norm} />}
-      {tab === 'timeline' && <TimelineTab {...props} />}
-      {tab === 'scenario' && <ScenarioTab {...props} norm={norm} />}
-      {tab === 'tax' && <TaxTab {...props} />}
-      {tab === 'detail' && <DetailTab {...props} />}
+      {effectiveTab === 'summary' && <SummaryTab {...props} norm={norm} />}
+      {effectiveTab === 'timeline' && <TimelineTab {...props} />}
+      {effectiveTab === 'scenario' && <ScenarioTab {...props} norm={norm} />}
+      {effectiveTab === 'tax' && <TaxTab {...props} />}
+      {effectiveTab === 'detail' && <DetailTab {...props} />}
     </>
   );
 }
