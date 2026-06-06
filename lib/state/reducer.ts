@@ -1,12 +1,11 @@
 // lib/state/reducer.ts — 단일 스토어 액션 (스펙 §6.2)
-import type { CommonProfile, ComparisonState, FinanceItem, Method } from '@/lib/engine/types';
-import { newItem } from './defaults';
+import type { CommonProfile, ComparisonState, FinanceItem } from '@/lib/engine/types';
 
 export type Action =
   | { type: 'setCommon'; patch: Partial<CommonProfile> }
-  | { type: 'addItem'; method: Method }
+  | { type: 'addItem'; item: FinanceItem }
   | { type: 'replaceItem'; item: FinanceItem }
-  | { type: 'duplicateItem'; id: string }
+  | { type: 'duplicateItem'; id: string; newId: string }
   | { type: 'removeItem'; id: string };
 
 export function reducer(state: ComparisonState, action: Action): ComparisonState {
@@ -14,7 +13,7 @@ export function reducer(state: ComparisonState, action: Action): ComparisonState
     case 'setCommon':
       return { ...state, common: { ...state.common, ...action.patch } };
     case 'addItem':
-      return { ...state, items: [...state.items, newItem(action.method)] };
+      return { ...state, items: [...state.items, action.item] };
     case 'replaceItem':
       return {
         ...state,
@@ -26,7 +25,7 @@ export function reducer(state: ComparisonState, action: Action): ComparisonState
       const src = state.items[idx];
       const copy: FinanceItem = {
         ...structuredClone(src),
-        id: newItem(src.method).id,
+        id: action.newId,
         label: src.label ? `${src.label} (복제)` : undefined,
       };
       const items = [...state.items];
