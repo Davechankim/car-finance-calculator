@@ -73,12 +73,13 @@ export function sunkAt(item: FinanceItem, common: CommonProfile, m: number): num
 
 export interface ExitResult { options: ExitOption[]; best: ExitOption; resaleEach: number }
 
-/** 시점 m(≤months)의 출구 옵션들 (스펙 §4.4) */
-export function exitOptionsAt(item: FinanceItem, common: CommonProfile, m: number): ExitResult {
+/** 시점 m의 출구 옵션들 (스펙 §4.4). m은 내부에서 [0, months]로 클램프 — 모든 파생 값이 동일 시계(horizon)를 공유. */
+export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: number): ExitResult {
+  const m = Math.min(Math.max(mRaw, 0), item.months);
   const f = financials(item);
   const count = item.vehicle.count;
   const sunk = sunkAt(item, common, m);
-  const remM = Math.max(item.months - m, 0);
+  const remM = item.months - m;
   const atEnd = remM === 0;
   const resaleEach = resaleAt(item, m);
   const resaleTotal = resaleEach * count;
