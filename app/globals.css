@@ -43,3 +43,22 @@ body {
 .item-head .sub { font-size: 11px; color: var(--sub); }
 .method-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .section-label { font-size: 11px; color: var(--sub); text-transform: none; margin: 10px 0 6px; font-weight: 600; }
+
+/* ---------- 결과 ---------- */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.verdict { border: 2px solid var(--good); background: #ecfdf5; border-radius: 12px; padding: 14px; }
+.verdict .big { font-size: 17px; font-weight: 700; color: var(--good); }
+.bar-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; }
+.bar-label { width: 170px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { flex: 1; background: #f1f5f9; border-radius: 6px; height: 22px; position: relative; }
+.bar-fill { height: 100%; border-radius: 6px; min-width: 2px; }
+.bar-val { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+table.cmp { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.cmp th, table.cmp td { border: 1px solid var(--line); padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+table.cmp th { background: #f8fafc; text-align: center; }
+table.cmp td.best { background: #ecfdf5; font-weight: 700; color: var(--good); }
+table.cmp td:first-child, table.cmp th:first-child { text-align: left; }
+.muted { color: var(--sub); font-size: 11px; }
+.disclaimer { font-size: 11px; color: var(--sub); line-height: 1.7; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 8px; }
