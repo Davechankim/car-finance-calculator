@@ -44,6 +44,14 @@ describe('deductibleFromParts — 한도 5단계 (스펙 §4.5)', () => {
   it('부동산임대업 50%: 인정액 절반', () => {
     expect(parts({ industryRate: 0.5 }).recognizedEach).toBeCloseTo(6_250_000, 0);
   });
+  it('bizUsePct는 0~100으로 클램프 — 150% 입력해도 비율 1', () => {
+    const b = parts({ useDrivingLog: true, bizUsePct: 150 });
+    expect(b.ratio).toBe(1);
+  });
+  it('한도제외 차량에도 업종 비용인정비율은 적용 (스펙 §4.5 단계4 — 보수적 휴리스틱)', () => {
+    const b = parts({ exempt: true, annualCost: 10_000_000, depEquiv: 7_000_000, industryRate: 0.5 });
+    expect(b.recognizedEach).toBe(5_000_000);
+  });
 });
 
 describe('annualInterestAt / deductibleAt — 항목 조립', () => {
@@ -67,6 +75,10 @@ describe('annualInterestAt / deductibleAt — 항목 조립', () => {
     expect(deductibleAt(op, c, 24).depEquiv)
       .toBeCloseTo(financials(op).monthly * 12 * 0.93, 4);
   });
+  it('만기 초과 m은 만기로 클램프 — 이자 발산 방지', () => {
+    const item = baseItem('installment');
+    expect(annualInterestAt(item, 120)).toBeCloseTo(annualInterestAt(item, 48), 4);
+  });
 });
 
 describe('taxSavingAt (스펙 §4.5 단계5)', () => {
@@ -87,5 +99,10 @@ describe('taxSavingAt (스펙 §4.5 단계5)', () => {
       vehicle: { ...one.vehicle, count: 3 },
     });
     expect(taxSavingAt(three, c, 24)).toBeCloseTo(taxSavingAt(one, c, 24) * 3, 4);
+  });
+  it('만기 초과 m은 만기로 동결', () => {
+    const c = baseCommon({ biz: 'personal' });
+    const item = baseItem('rent');
+    expect(taxSavingAt(item, c, 120)).toBeCloseTo(taxSavingAt(item, c, 48), 4);
   });
 });
