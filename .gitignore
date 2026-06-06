@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# misc
+.DS_Store
+*.log
+
+# superpowers brainstorm sessions (visual companion)
+.superpowers/
+
+# env
+.env*.local
+
+# test coverage
+coverage/
