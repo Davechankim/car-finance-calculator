@@ -10,7 +10,7 @@ import { normalize, type Norm } from './ResultTabs';
 const TRAITS: Record<string, [string, string, string, string]> = {
   // [초기부담, 소유권, 비용처리, 만기]
   rent: ['낮음 (선납만)', '렌트사', '렌트료 (한도 내)', '반납'],
-  oplease: ['낮음 (선납만)', '리스사', '리스료 (한도 내)', '반납/인수/승계'],
+  oplease: ['낮음 (선납만)', '리스사', '리스료 (한도 내)', '반납/인수 (승계는 중도만)'],
   finlease: ['취득세 포함', '이용자 (자산 계상)', '감가상각+이자', '잔존가 지급 후 소유'],
   installment: ['높음 (현금+취득세)', '이용자', '감가상각+이자', '소유 유지'],
 };
