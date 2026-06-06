@@ -26,13 +26,14 @@ export function ScenarioTab(props: { state: ComparisonState; result: CompareResu
               <tr key={row.scenario.atMonths}>
                 <td>{row.scenario.label} ({row.scenario.atMonths}개월)</td>
                 {row.cells.map((cell) => {
-                  const item = state.items.find((it) => it.id === cell.itemId)!;
+                  const item = state.items.find((it) => it.id === cell.itemId);
+                  if (!item) return <td key={cell.itemId}>—</td>; // state/result 일시 불일치 방어
                   const v = normalize(cell.snapshot.netCost, item.vehicle.count, cell.snapshot.m, norm);
                   return (
                     <td key={cell.itemId} className={row.bestItemId === cell.itemId ? 'best' : ''}>
                       {fmtMan(v)}원
                       <div className="muted">
-                        {cell.snapshot.bestExit.label}{cell.snapshot.ended ? ' · 만기 종료' : ''}
+                        {cell.snapshot.bestExit.label}{cell.snapshot.ended ? ` · 만기 종료 (${cell.snapshot.m}개월 기준)` : ''}
                       </div>
                     </td>
                   );

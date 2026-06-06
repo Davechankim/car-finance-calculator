@@ -26,7 +26,9 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
   }));
   const vals = atEnd.map((x) => normalize(x.s.netCost, x.item.vehicle.count, x.item.months, norm));
   const maxAbs = Math.max(...vals.map(Math.abs), 1);
-  const minVal = Math.min(...vals);
+  // 최적 하이라이트는 raw netCost 기준 (globalBest와 일관) — 정규화는 수치 표시만 바꾼다
+  const rawVals = atEnd.map((x) => x.s.netCost);
+  const minRawIdx = rawVals.indexOf(Math.min(...rawVals));
   const gb = result.globalBest;
   const gbItem = gb ? state.items.find((it) => it.id === gb.itemId) : null;
   const gbIdx = gb ? state.items.findIndex((it) => it.id === gb.itemId) : -1;
@@ -52,8 +54,8 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
                 className="bar-fill"
                 style={{
                   width: `${(Math.abs(vals[idx]) / maxAbs) * 100}%`,
-                  background: vals[idx] === minVal ? 'var(--good)' : METHOD_COLORS[x.item.method],
-                  opacity: vals[idx] === minVal ? 1 : 0.45,
+                  background: idx === minRawIdx ? 'var(--good)' : METHOD_COLORS[x.item.method],
+                  opacity: idx === minRawIdx ? 1 : 0.45,
                 }}
               />
             </div>

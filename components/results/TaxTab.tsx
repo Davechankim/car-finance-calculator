@@ -1,7 +1,6 @@
 'use client';
 import { deductibleAt, taxSavingAt } from '@/lib/engine/tax';
-import { marginalRate } from '@/lib/engine/taxData';
-import { isExempt } from '@/lib/engine/taxData';
+import { isExempt, marginalRate } from '@/lib/engine/taxData';
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
