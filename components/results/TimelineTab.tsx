@@ -7,8 +7,7 @@ import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
 import { itemTitle } from '@/lib/state/defaults';
-
-const PALETTE = ['#2563eb', '#059669', '#9333ea', '#d97706', '#dc2626', '#0891b2', '#65a30d', '#db2777'];
+import { itemColor } from './palette';
 
 export function TimelineTab(props: { state: ComparisonState; result: CompareResult }) {
   const { state, result } = props;
@@ -46,7 +45,7 @@ export function TimelineTab(props: { state: ComparisonState; result: CompareResu
             <Legend />
             {result.series.map((s, i) => {
               const item = state.items[i];
-              const color = PALETTE[i % PALETTE.length];
+              const color = itemColor(i);
               return [
                 <Line key={`a${i}`} dataKey={`a${i}`} name={itemTitle(item, i)}
                   stroke={color} strokeWidth={2} dot={false} connectNulls={false} />,

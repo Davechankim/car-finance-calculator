@@ -4,7 +4,7 @@ import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
 import { itemTitle, METHOD_LABELS } from '@/lib/state/defaults';
-import { METHOD_COLORS } from '@/components/builder/ItemCard';
+import { itemColor } from './palette';
 import { normalize, type Norm } from './ResultTabs';
 
 const TRAITS: Record<string, [string, string, string, string]> = {
@@ -54,7 +54,7 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
                 className="bar-fill"
                 style={{
                   width: `${(Math.abs(vals[idx]) / maxAbs) * 100}%`,
-                  background: idx === minRawIdx ? 'var(--good)' : METHOD_COLORS[x.item.method],
+                  background: idx === minRawIdx ? 'var(--good)' : itemColor(idx),
                   opacity: idx === minRawIdx ? 1 : 0.45,
                 }}
               />
