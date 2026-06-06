@@ -62,6 +62,19 @@ describe('compareAll (스펙 §5)', () => {
     const r = compareAll({ common: baseCommon(), items: [baseItem('rent', { id: 'x' })] });
     expect(r.globalBest!.itemId).toBe('x');
   });
+
+  it('GRID_STEP 비배수 만기(55개월): bestPoint가 정확한 만기점 후보를 포함하고 일관된 값 반환', () => {
+    const r = compareAll({ common: baseCommon(), items: [baseItem('installment', { id: 'odd', months: 55 })] });
+    const s = r.series[0];
+    // points는 그리드 기준 (55는 그리드에 없어도 됨)
+    expect(r.gridMonths).toContain(55); // 끝점 보장 로직: horizon=55 → 마지막에 push됨
+    // bestPoint는 그리드∪{만기} 후보의 실제 최소와 일치
+    const candidates = r.gridMonths.filter((m) => m <= 55).concat([]);
+    const manualMin = Math.min(
+      ...candidates.map((m) => costAt(baseItem('installment', { id: 'odd', months: 55 }), baseCommon(), m).netCost),
+    );
+    expect(s.bestPoint.netCost).toBeCloseTo(manualMin, 4);
+  });
 });
 
 describe('불변식 (스펙 §7 P)', () => {
@@ -99,7 +112,7 @@ describe('불변식 (스펙 §7 P)', () => {
     expect(Math.abs(twoT - oneT * 2)).toBeGreaterThan(1); // 1회 차감이라 비선형
   });
 
-  it('벤치마크: 50항목 × 25시점 < 200ms', () => {
+  it('벤치마크: 50항목 × 17시점 그리드 < 200ms', () => {
     const items = Array.from({ length: 50 }, (_, i) =>
       baseItem((['rent', 'oplease', 'finlease', 'installment'] as const)[i % 4], { id: `i${i}` }),
     );
