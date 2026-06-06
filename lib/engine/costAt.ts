@@ -1,4 +1,5 @@
 // lib/engine/costAt.ts — 항목 1개의 시점별 비용 계산 (스펙 §4.2~4.3)
+// 반올림 정책: 엔진은 raw float 유지(취득세만 원 단위 정수 — 세액 도메인 규칙), 표시 반올림은 UI 포맷터 책임.
 import { monthlyRate, pmt } from './pmt';
 import { isExempt, VAT_FRACTION } from './taxData';
 import type { CommonProfile, FinanceItem } from './types';
@@ -54,16 +55,17 @@ export function vatRefundCumEach(item: FinanceItem, common: CommonProfile, m: nu
   return 0; // oplease: 리스료 면세
 }
 
-/** 항목 전체 누적지출 (스펙 §4.3). m은 호출자가 계약기간 내로 클램프. */
+/** 항목 전체 누적지출 (스펙 §4.3). m은 내부에서 [0, months]로 클램프 — 만기 초과 납입·VAT 비대칭 방지. */
 export function sunkAt(item: FinanceItem, common: CommonProfile, m: number): number {
   const f = financials(item);
   const count = item.vehicle.count;
-  const yrs = m / 12;
+  const mc = Math.min(Math.max(m, 0), item.months);
+  const yrs = mc / 12;
   return (
     (f.downEach + f.cashExtraEach + f.acqTaxEach) * count +
-    f.monthly * m * count +
+    f.monthly * mc * count +
     (item.insuranceYr + item.maintenanceYr) * yrs * count -
     common.tradeIn -
-    vatRefundCumEach(item, common, m) * count
+    vatRefundCumEach(item, common, mc) * count
   );
 }

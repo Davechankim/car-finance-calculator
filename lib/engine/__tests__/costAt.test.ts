@@ -87,4 +87,9 @@ describe('sunkAt — 누적지출 (스펙 §4.3)', () => {
     // 선납 1,200만 + 월납×24 + 보험 80만×2년
     expect(sunkAt(item, baseCommon(), 24)).toBeCloseTo(12_000_000 + monthly * 24 + 1_600_000, 4);
   });
+  it('만기 초과 m은 만기로 클램프 (납입·환급 비대칭 방지)', () => {
+    const c = baseCommon({ biz: 'personal' });
+    const truck = baseItem('rent', { vehicle: { ...baseItem('rent').vehicle, category: 'truck' } });
+    expect(sunkAt(truck, c, 60)).toBe(sunkAt(truck, c, 48));
+  });
 });
