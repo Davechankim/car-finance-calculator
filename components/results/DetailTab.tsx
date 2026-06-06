@@ -15,7 +15,8 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
   if (state.items.length === 0) return <div className="card">비교 항목을 추가하세요.</div>;
 
   const item = state.items[Math.min(sel, state.items.length - 1)];
-  const s = costAt(item, state.common, m);
+  const effM = Math.min(m, item.months); // 항목 전환 시 만기 초과 방지 — 표시와 계산 일치
+  const s = costAt(item, state.common, effM);
   const f = financials(item);
   const count = item.vehicle.count;
   const vatCum = vatRefundCumEach(item, state.common, s.m) * count;
@@ -28,7 +29,7 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
     { label: '보험·정비 누적', value: (item.insuranceYr + item.maintenanceYr) * (s.m / 12) * count },
     { label: '보상판매 차감', value: -state.common.tradeIn },
     { label: '부가세 환급', value: -vatCum },
-    { label: `출구 정산 (${s.bestExit.label})`, value: s.bestExit.cost - s.sunk },
+    { label: `출구 정산 순효과 (${s.bestExit.label})`, value: s.bestExit.cost - s.sunk },
     { label: '세금절감', value: -s.taxSaving },
     { label: '기회비용', value: s.oppCost },
   ].filter((p) => p.value !== 0);
@@ -43,7 +44,8 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
           options={state.items.map((it, i) => ({ key: String(i), label: itemTitle(it, i) }))}
           onChange={(k) => setSel(Number(k))}
         />
-        <NumInput label="시점" suffix="개월" step={3} min={0} max={item.months} value={m} onChange={setM} />
+        <NumInput label="시점" suffix="개월" step={3} min={0} max={item.months} value={effM}
+          onChange={(v) => setM(Math.min(v, item.months))} />
       </div>
       {parts.map((p) => (
         <div className="bar-row" key={p.label}>
