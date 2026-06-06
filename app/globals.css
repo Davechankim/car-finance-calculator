@@ -62,3 +62,12 @@ table.cmp td.best { background: #ecfdf5; font-weight: 700; color: var(--good); }
 table.cmp td:first-child, table.cmp th:first-child { text-align: left; }
 .muted { color: var(--sub); font-size: 11px; }
 .disclaimer { font-size: 11px; color: var(--sub); line-height: 1.7; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 8px; }
+
+/* ---------- 헤더 ---------- */
+.topbar {
+  background: var(--card); border-bottom: 1px solid var(--line);
+  padding: 14px 20px; display: flex; align-items: baseline; gap: 12px;
+}
+.topbar h1 { font-size: 17px; }
+.topbar .sub { font-size: 12px; color: var(--sub); }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--sub); }
