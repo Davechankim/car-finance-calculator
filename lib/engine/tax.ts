@@ -23,7 +23,7 @@ export function deductibleFromParts(p: {
 }): DeductibleBreakdown {
   let ratio: number;
   if (p.exempt) ratio = 1;
-  else if (p.useDrivingLog) ratio = p.bizUsePct / 100;
+  else if (p.useDrivingLog) ratio = Math.min(Math.max(p.bizUsePct, 0), 100) / 100; // 업무사용비율은 물리적으로 0~100%
   else ratio = p.annualCost > 0 ? Math.min(CAR_COST_LIMIT_YR / p.annualCost, 1) : 1;
 
   const usedAmount = p.annualCost * ratio;
@@ -34,14 +34,15 @@ export function deductibleFromParts(p: {
 
 /** 연이자 추정 (fin/inst): (누적납입 − 원금상환분) / 연수 (스펙 §4.5) */
 export function annualInterestAt(item: FinanceItem, m: number): number {
-  if (m <= 0) return 0;
+  const mc = Math.min(Math.max(m, 0), item.months); // 만기 초과 시 이자 발산 방지 — costAt 모듈 클램프 규약과 동일
+  if (mc <= 0) return 0;
   const f = financials(item);
-  const yrs = m / 12;
-  const repaid = f.principal - remBal(f.principal, f.r, item.months, m);
-  return Math.max((f.monthly * m - repaid) / yrs, 0);
+  const yrs = mc / 12;
+  const repaid = f.principal - remBal(f.principal, f.r, item.months, mc);
+  return Math.max((f.monthly * mc - repaid) / yrs, 0);
 }
 
-/** 항목 → 파츠 조립 (1대당) */
+/** 항목 → 파츠 조립 (1대당). m은 fin/inst 경로의 연이자에만 영향 — rent/oplease는 시점 무관. */
 export function deductibleAt(item: FinanceItem, common: CommonProfile, m: number): DeductibleBreakdown {
   const f = financials(item);
   const ancillary = item.insuranceYr + item.maintenanceYr;
@@ -66,8 +67,9 @@ export function deductibleAt(item: FinanceItem, common: CommonProfile, m: number
 
 /** 항목 전체 세금절감 (시점 m) */
 export function taxSavingAt(item: FinanceItem, common: CommonProfile, m: number): number {
+  const mc = Math.min(Math.max(m, 0), item.months); // 만기 이후 절감 동결
   const mr = marginalRate(common);
-  if (mr === 0 || m <= 0) return 0;
-  const b = deductibleAt(item, common, m);
-  return b.recognizedEach * (m / 12) * mr * item.vehicle.count;
+  if (mr === 0 || mc <= 0) return 0;
+  const b = deductibleAt(item, common, mc);
+  return b.recognizedEach * (mc / 12) * mr * item.vehicle.count;
 }
