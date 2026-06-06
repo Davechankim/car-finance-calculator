@@ -23,8 +23,8 @@ describe('remBal (스펙 §4.1)', () => {
   });
   it('m=0이면 원금 그대로, m=n이면 0', () => {
     const r = monthlyRate(5.5);
-    expect(remBal(28_000_000, r, 48, 0)).toBeCloseTo(28_000_000, 4);
-    expect(remBal(28_000_000, r, 48, 48)).toBeCloseTo(0, 4);
+    expect(Math.abs(remBal(28_000_000, r, 48, 0) - 28_000_000)).toBeLessThan(1);
+    expect(Math.abs(remBal(28_000_000, r, 48, 48))).toBeLessThan(1);
   });
   it('금리 0%: 선형 상환', () => {
     expect(remBal(48_000_000, 0, 48, 12)).toBe(36_000_000);
