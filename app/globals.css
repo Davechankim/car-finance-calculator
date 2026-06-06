@@ -8,3 +8,38 @@ body {
   font-family: 'Pretendard Variable', Pretendard, -apple-system, sans-serif;
   background: var(--bg); color: var(--text); font-size: 14px;
 }
+
+/* ---------- 공용 레이아웃 ---------- */
+.shell { display: flex; gap: 16px; padding: 16px; max-width: 1480px; margin: 0 auto; }
+.builder-col { width: 420px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
+.results-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 960px) { .shell { flex-direction: column; } .builder-col { width: 100%; } }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.card h3 { font-size: 14px; margin-bottom: 10px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 120px; }
+.field > label { font-size: 11px; color: var(--sub); }
+.field input, .field select {
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 13px;
+  font-family: inherit; width: 100%; background: #fff;
+}
+.hint { font-size: 11px; color: var(--sub); }
+.chips { display: inline-flex; gap: 4px; }
+.chip {
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px;
+  background: #fff; cursor: pointer; color: var(--sub);
+}
+.chip.on { border-color: var(--accent); color: var(--accent); background: #eff6ff; }
+.badge-warn {
+  display: inline-block; font-size: 11px; color: var(--warn);
+  background: #fef3c7; border-radius: 6px; padding: 2px 8px;
+}
+.btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.ghost { border-style: dashed; color: var(--sub); width: 100%; }
+.item-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.item-head .title { font-weight: 600; font-size: 13px; flex: 1; }
+.item-head .sub { font-size: 11px; color: var(--sub); }
+.method-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.section-label { font-size: 11px; color: var(--sub); text-transform: none; margin: 10px 0 6px; font-weight: 600; }
