@@ -54,7 +54,7 @@ export interface FinanceItem {
   insuranceYr: number;            // 1대당 연 보험료
   maintenanceYr: number;          // 1대당 연 정비비
   subsidy: number;                // 1대당 지원금
-  acqTaxRatePct: number;
+  acqTaxRatePct: number;   // 취득세율 % 숫자 (예: 7 → 7%)
   tax: TaxOptions;
   depreciation: Depreciation;
   exit: ExitTerms;
@@ -82,6 +82,7 @@ export interface CostSnapshot {
   netCost: number;          // 실질순비용 = bestExit.cost − taxSaving + oppCost
 }
 
+/** ModeValue → 원 단위 금액. 정책: pct 모드는 원 단위 반올림, amount 모드는 입력값 그대로 (소비자는 중복 반올림 금지). */
 export function resolveAmount(mv: ModeValue | null, base: number): number {
   if (!mv) return 0;
   return mv.mode === 'pct' ? Math.round(base * (mv.value / 100)) : mv.value;
