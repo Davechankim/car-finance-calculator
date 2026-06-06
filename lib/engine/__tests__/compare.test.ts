@@ -63,17 +63,23 @@ describe('compareAll (스펙 §5)', () => {
     expect(r.globalBest!.itemId).toBe('x');
   });
 
-  it('GRID_STEP 비배수 만기(55개월): bestPoint가 정확한 만기점 후보를 포함하고 일관된 값 반환', () => {
-    const r = compareAll({ common: baseCommon(), items: [baseItem('installment', { id: 'odd', months: 55 })] });
-    const s = r.series[0];
-    // points는 그리드 기준 (55는 그리드에 없어도 됨)
-    expect(r.gridMonths).toContain(55); // 끝점 보장 로직: horizon=55 → 마지막에 push됨
-    // bestPoint는 그리드∪{만기} 후보의 실제 최소와 일치
-    const candidates = r.gridMonths.filter((m) => m <= 55).concat([]);
+  it('그리드 외 만기점(55개월, 비최장 항목): 만기 후보가 추가되어 bestPoint에 반영된다', () => {
+    // horizon=60 → grid에 55 없음 → candidates.push(55) 분기가 실제로 실행되는 구성
+    const odd = baseItem('installment', { id: 'odd', months: 55 });
+    const r = compareAll({
+      common: baseCommon(),
+      items: [odd, baseItem('oplease', { id: 'long', months: 60 })],
+    });
+    expect(r.gridMonths).not.toContain(55); // 전제 확인: 55는 그리드 밖
+    const s = r.series.find((x) => x.itemId === 'odd')!;
+    // bestPoint는 그리드 내 후보(≤55) ∪ {정확한 만기 55} 의 최소
+    const gridCandidates = r.gridMonths.filter((m) => m <= 55);
     const manualMin = Math.min(
-      ...candidates.map((m) => costAt(baseItem('installment', { id: 'odd', months: 55 }), baseCommon(), m).netCost),
+      ...gridCandidates.concat([55]).map((m) => costAt(odd, baseCommon(), m).netCost),
     );
     expect(s.bestPoint.netCost).toBeCloseTo(manualMin, 4);
+    // 만기점이 최적이면 m=55가 그대로 보고될 수 있어야 함 (값 일관성)
+    expect(s.bestPoint.m).toBeLessThanOrEqual(55);
   });
 });
 
