@@ -2,7 +2,7 @@
 import { costAt } from './snapshot';
 import type { ComparisonState, CostSnapshot, Scenario } from './types';
 
-export const GRID_STEP = 3;
+const GRID_STEP = 3;
 
 export interface SeriesPoint { m: number; netCost: number; ended: boolean }
 export interface ItemSeries {
@@ -31,16 +31,24 @@ export function compareAll(state: ComparisonState): CompareResult {
   if (gridMonths[gridMonths.length - 1] !== horizon) gridMonths.push(horizon);
 
   const series: ItemSeries[] = items.map((item) => {
+    // 그리드 시점 스냅샷을 1회만 계산해 points와 bestPoint 탐색에 재사용
+    const snaps = new Map<number, CostSnapshot>();
+    for (const m of gridMonths) snaps.set(m, costAt(item, common, m));
+
     const points: SeriesPoint[] = gridMonths.map((m) => {
-      const s = costAt(item, common, m);
+      const s = snaps.get(m)!;
       return { m, netCost: s.netCost, ended: s.ended };
     });
-    // 자기 계약기간 내 후보 (+ 정확한 만기점)
+
+    // 자기 계약기간 내 후보 (+ 그리드에 없는 정확한 만기점)
     const candidates = gridMonths.filter((m) => m <= item.months);
-    if (!candidates.includes(item.months)) candidates.push(item.months);
+    if (!candidates.includes(item.months)) {
+      candidates.push(item.months);
+      snaps.set(item.months, costAt(item, common, item.months));
+    }
     let best = { m: 0, netCost: Infinity, exitLabel: '' };
     for (const m of candidates) {
-      const s = costAt(item, common, m);
+      const s = snaps.get(m)!;
       if (s.netCost < best.netCost) best = { m, netCost: s.netCost, exitLabel: s.bestExit.label };
     }
     return { itemId: item.id, points, bestPoint: best };
