@@ -5,6 +5,7 @@ describe('format', () => {
   it('fmtWon: 콤마+원', () => {
     expect(fmtWon(939401.5)).toBe('939,402원');
     expect(fmtWon(-1100000)).toBe('-1,100,000원');
+    expect(fmtWon(-0.4)).toBe('0원');
   });
   it('fmtMan: 만/억 축약', () => {
     expect(fmtMan(40_000_000)).toBe('4,000만');
@@ -12,6 +13,7 @@ describe('format', () => {
     expect(fmtMan(200_000_000)).toBe('2억');
     expect(fmtMan(-11_000_000)).toBe('-1,100만');
     expect(fmtMan(0)).toBe('0만');
+    expect(fmtMan(-4_999)).toBe('0만');
   });
   it('fmtPct', () => {
     expect(fmtPct(5.9)).toBe('5.9%');
