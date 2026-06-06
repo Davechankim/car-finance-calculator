@@ -93,7 +93,7 @@ export function ItemCard(props: {
           </div>
           {item.method === 'installment' && (
             <div className="row">
-              <MoneyInput label="대출 금액 (1대당)" value={item.loanAmount ?? 0}
+              <MoneyInput label="대출 금액 (1대당 · 0 = 전액 현금)" value={item.loanAmount ?? 0}
                 onChange={(loanAmount) => set({ loanAmount })} />
             </div>
           )}
@@ -185,13 +185,15 @@ export function ItemCard(props: {
               </div>
             </>
           )}
-          <div className="row">
-            <MoneyInput
-              label={item.method === 'oplease' ? '조기인수 할인' : item.method === 'rent' ? '— (해당 없음)' : '조기정산·중도상환 감면'}
-              value={item.exit.earlyDiscount}
-              onChange={(earlyDiscount) => set({ exit: { ...item.exit, earlyDiscount } })}
-            />
-          </div>
+          {item.method !== 'rent' && (
+            <div className="row">
+              <MoneyInput
+                label={item.method === 'oplease' ? '조기인수 할인' : '조기정산·중도상환 감면'}
+                value={item.exit.earlyDiscount}
+                onChange={(earlyDiscount) => set({ exit: { ...item.exit, earlyDiscount } })}
+              />
+            </div>
+          )}
 
           <div className="row" style={{ marginTop: 10 }}>
             <div className="field">
