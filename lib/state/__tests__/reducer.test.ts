@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultState, newItem } from '../defaults';
+import { defaultState, newItem, nextId } from '../defaults';
 import { reducer } from '../reducer';
 
 describe('defaults (스펙 §6.3)', () => {
@@ -31,12 +31,12 @@ describe('reducer (스펙 §6.2)', () => {
   });
   it('addItem / removeItem / duplicateItem / replaceItem', () => {
     let s = defaultState();
-    s = reducer(s, { type: 'addItem', method: 'finlease' });
+    s = reducer(s, { type: 'addItem', item: newItem('finlease') });
     expect(s.items).toHaveLength(4);
     expect(s.items[3].method).toBe('finlease');
 
     const target = s.items[0];
-    s = reducer(s, { type: 'duplicateItem', id: target.id });
+    s = reducer(s, { type: 'duplicateItem', id: target.id, newId: nextId() });
     expect(s.items).toHaveLength(5);
     expect(s.items[1].method).toBe(target.method); // 복제는 원본 바로 뒤
     expect(s.items[1].id).not.toBe(target.id);
@@ -48,5 +48,12 @@ describe('reducer (스펙 §6.2)', () => {
     const n = s.items.length;
     s = reducer(s, { type: 'removeItem', id: s.items[0].id });
     expect(s.items).toHaveLength(n - 1);
+  });
+  it('reducer는 순수 — 같은 액션 두 번 적용해도 id 충돌 없음 (StrictMode 안전)', () => {
+    const s0 = defaultState();
+    const item = newItem('rent');
+    const s1 = reducer(s0, { type: 'addItem', item });
+    const s2 = reducer(s0, { type: 'addItem', item }); // 동일 액션 재적용 (이중 호출 시뮬레이션)
+    expect(s1.items[s1.items.length - 1].id).toBe(s2.items[s2.items.length - 1].id); // 결정론
   });
 });

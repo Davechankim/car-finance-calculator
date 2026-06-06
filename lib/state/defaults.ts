@@ -7,7 +7,7 @@ export const METHOD_LABELS: Record<Method, string> = {
 };
 
 let seq = 0;
-const nextId = () => `item-${++seq}-${Date.now().toString(36)}`;
+export const nextId = () => `item-${++seq}-${Date.now().toString(36)}`;
 
 interface MethodDefault {
   ratePct: number; residualPct: number | null;

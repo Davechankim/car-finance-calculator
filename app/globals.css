@@ -61,7 +61,7 @@ table.cmp th { background: #f8fafc; text-align: center; }
 table.cmp td.best { background: #ecfdf5; font-weight: 700; color: var(--good); }
 table.cmp td:first-child, table.cmp th:first-child { text-align: left; }
 .muted { color: var(--sub); font-size: 11px; }
-.disclaimer { font-size: 11px; color: var(--sub); line-height: 1.7; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 8px; }
+.disclaimer { font-size: 11px; color: var(--sub); line-height: 1.7; }
 
 /* ---------- 헤더 ---------- */
 .topbar {
