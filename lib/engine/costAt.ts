@@ -1,8 +1,9 @@
 // lib/engine/costAt.ts — 항목 1개의 시점별 비용 계산 (스펙 §4.2~4.3)
 // 반올림 정책: 엔진은 raw float 유지(취득세만 원 단위 정수 — 세액 도메인 규칙), 표시 반올림은 UI 포맷터 책임.
-import { monthlyRate, pmt } from './pmt';
+import { monthlyRate, pmt, remBal } from './pmt';
+import { resaleAt } from './resale';
 import { isExempt, VAT_FRACTION } from './taxData';
-import type { CommonProfile, FinanceItem } from './types';
+import type { CommonProfile, ExitOption, FinanceItem } from './types';
 import { resolveAmount } from './types';
 
 export interface Financials {
@@ -68,4 +69,70 @@ export function sunkAt(item: FinanceItem, common: CommonProfile, m: number): num
     common.tradeIn -
     vatRefundCumEach(item, common, mc) * count
   );
+}
+
+export interface ExitResult { options: ExitOption[]; best: ExitOption; resaleEach: number }
+
+/** 시점 m(≤months)의 출구 옵션들 (스펙 §4.4) */
+export function exitOptionsAt(item: FinanceItem, common: CommonProfile, m: number): ExitResult {
+  const f = financials(item);
+  const count = item.vehicle.count;
+  const sunk = sunkAt(item, common, m);
+  const remM = Math.max(item.months - m, 0);
+  const atEnd = remM === 0;
+  const resaleEach = resaleAt(item, m);
+  const resaleTotal = resaleEach * count;
+  const ex = item.exit;
+  const options: ExitOption[] = [];
+
+  const penalty = remM * f.monthly * (ex.penaltyPct / 100) * count;
+  const returnCost = sunk + penalty + (ex.returnInspFee + ex.mileagePenalty) * count;
+
+  if (item.method === 'rent') {
+    options.push(
+      atEnd
+        ? { kind: 'return', label: '만기 반납', cost: returnCost }
+        : { kind: 'terminate', label: '중도해지 반납', cost: returnCost },
+    );
+    if (ex.canTransfer && !atEnd)
+      options.push({ kind: 'transfer', label: '계약 승계', cost: sunk + ex.transferFee * count });
+  }
+
+  if (item.method === 'oplease') {
+    options.push(
+      atEnd
+        ? { kind: 'return', label: '만기 반납', cost: returnCost }
+        : { kind: 'terminate', label: '중도해지 반납', cost: returnCost },
+    );
+    if (ex.canTransfer && !atEnd)
+      options.push({ kind: 'transfer', label: '계약 승계', cost: sunk + ex.transferFee * count });
+    options.push({
+      kind: 'buyoutSell',
+      label: atEnd ? '잔존가 인수 후 매각' : '조기 인수 후 매각',
+      cost: sunk + Math.max(f.resEach - ex.earlyDiscount, 0) * count - resaleTotal,
+    });
+  }
+
+  if (item.method === 'finlease') {
+    const debtEach = remBal(f.principal, f.r, item.months, m) + f.resEach;
+    options.push({
+      kind: 'settleSell',
+      label: atEnd ? '잔존가 지급·소유 (시세 반영)' : '조기정산 후 매각',
+      cost: sunk + Math.max(debtEach - ex.earlyDiscount, 0) * count - resaleTotal,
+    });
+    if (ex.canTransfer && !atEnd)
+      options.push({ kind: 'transfer', label: '리스 승계', cost: sunk + ex.transferFee * count });
+  }
+
+  if (item.method === 'installment') {
+    const balEach = remBal(f.principal, f.r, item.months, m);
+    options.push({
+      kind: 'settleSell',
+      label: atEnd ? '보유 (시세 반영)' : '중도상환 후 매각',
+      cost: sunk + Math.max(balEach - ex.earlyDiscount, 0) * count - resaleTotal,
+    });
+  }
+
+  const best = options.reduce((a, b) => (b.cost < a.cost ? b : a));
+  return { options, best, resaleEach };
 }
