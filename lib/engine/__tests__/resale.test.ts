@@ -19,6 +19,17 @@ describe('resaleAt (스펙 §4.4)', () => {
       depreciation: { depRatePct: 15, floorPct: 25, resaleOverrides: [{ atMonths: 24, price: 25_000_000 }] },
     });
     expect(resaleAt(o, 24)).toBe(25_000_000);
-    expect(resaleAt(o, 12)).toBeCloseTo(34_000_000, 0); // 다른 시점은 커브 사용
+    expect(resaleAt(o, 12)).toBe(34_000_000); // 다른 시점은 커브 사용
+  });
+  it('count=2여도 1대 가격 반환 (대수 곱셈은 호출자 책임)', () => {
+    const two = baseItem('installment', { vehicle: { ...baseItem('installment').vehicle, count: 2 } });
+    expect(two.vehicle.count).toBe(2);
+    expect(resaleAt(two, 24)).toBeCloseTo(28_900_000, 0);
+  });
+  it('감가율 100% 이상이어도 NaN 없이 floor로 멈춤', () => {
+    const x = baseItem('installment', {
+      depreciation: { depRatePct: 120, floorPct: 25, resaleOverrides: [] },
+    });
+    expect(resaleAt(x, 6)).toBe(10_000_000);
   });
 });
