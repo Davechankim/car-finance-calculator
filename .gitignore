@@ -17,3 +17,6 @@ out/
 
 # test coverage
 coverage/
+
+# typescript build cache
+*.tsbuildinfo
