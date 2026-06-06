@@ -59,3 +59,9 @@ export function defaultState(): ComparisonState {
     items: [newItem('rent'), newItem('oplease'), newItem('installment')],
   };
 }
+
+export function itemTitle(item: FinanceItem, index: number): string {
+  const auto = `${METHOD_LABELS[item.method]}${item.vehicle.name ? ` · ${item.vehicle.name}` : ''}`;
+  const base = item.label?.trim() || auto;
+  return `${index + 1}. ${base}${item.vehicle.count > 1 ? ` ×${item.vehicle.count}` : ''}`;
+}
