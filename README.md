@@ -19,8 +19,12 @@ Node.js 22.13 이상이 필요합니다.
 npm install
 npm run dev    # http://localhost:3000
 npm test       # 계산 엔진 단위 테스트 (Vitest)
+npm run test:e2e  # 실제 Chromium 사용자 흐름 테스트 (Playwright)
 npm run build  # 프로덕션 빌드
 ```
+
+처음 E2E를 실행하는 환경에서는 `npx playwright install chromium`으로 테스트 브라우저를
+한 번 설치합니다. 배포 전 전체 검증은 `npm run release:check`로 실행합니다.
 
 ## 구조
 
@@ -58,6 +62,8 @@ npm run build  # 프로덕션 빌드
 
 Codex Sites 프로젝트와 연결되어 있습니다. `npm run build`는 Cloudflare Workers 호환
 `dist/` 번들을 만들며, `.openai/hosting.json`의 프로젝트 연결 정보로 버전을 저장·배포합니다.
+GitHub PR 검증부터 비공개 운영 배포·롤백까지의 절차는
+[`docs/deployment.md`](docs/deployment.md)를 따릅니다.
 
 ## 한계
 
