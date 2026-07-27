@@ -21,6 +21,8 @@ dist/
 
 # test coverage
 coverage/
+playwright-report/
+test-results/
 
 # typescript build cache
 *.tsbuildinfo
