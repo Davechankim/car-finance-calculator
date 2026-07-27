@@ -13,6 +13,8 @@
 
 ## 실행
 
+Node.js 22.13 이상이 필요합니다.
+
 ```bash
 npm install
 npm run dev    # http://localhost:3000
@@ -52,11 +54,10 @@ npm run build  # 프로덕션 빌드
 한도 제외 차량은 위 금액 한도를 적용하지 않되, 업무사용비율을 입력하면 해당 비율만
 인정하고 미입력 시에는 100% 업무사용으로 가정합니다.
 
-## 배포 (Vercel)
+## 배포
 
-1. GitHub에 저장소 push
-2. [vercel.com](https://vercel.com) → Add New Project → 저장소 Import (설정 기본값 그대로)
-3. 이후 `git push`마다 자동 배포. CLI 사용 시: `npx vercel`
+Codex Sites 프로젝트와 연결되어 있습니다. `npm run build`는 Cloudflare Workers 호환
+`dist/` 번들을 만들며, `.openai/hosting.json`의 프로젝트 연결 정보로 버전을 저장·배포합니다.
 
 ## 한계
 

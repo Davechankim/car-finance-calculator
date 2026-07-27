@@ -5,6 +5,10 @@ node_modules/
 .next/
 out/
 
+# Sites / Cloudflare build artifacts
+dist/
+.wrangler/
+
 # misc
 .DS_Store
 *.log
