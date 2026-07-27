@@ -10,7 +10,7 @@
 
 **스펙:** `docs/superpowers/specs/2026-06-06-car-finance-calculator-design.md` (이하 "스펙 §N"으로 인용)
 
-**프로젝트 루트:** `/Users/gim-yechan/projects/car-finance-calculator` — 모든 경로는 루트 기준, 모든 명령은 루트에서 실행.
+**프로젝트 루트:** 저장소 최상위 디렉터리 — 모든 경로는 루트 기준, 모든 명령은 루트에서 실행.
 
 **금액 단위 규약:** 엔진 내부는 전부 **원(won) 단위 number**. 퍼센트는 `5.9` 같은 % 숫자(분수 아님). 세율만 예외적으로 분수(`0.15`)를 쓰며 변수명에 `Rate`를 붙인다.
 
@@ -3165,7 +3165,6 @@ git commit -m "docs: 계산 로직 검증 보고서 — 공식별 손계산 대�
 - **타입 일관성**: `costAt()`은 `snapshot.ts` 소속 (의존 순환 방지: snapshot → tax → costAt → pmt/resale). `financials/sunkAt/vatRefundCumEach/exitOptionsAt`은 `costAt.ts` 소속. UI는 전부 `@/` alias 사용 (vitest alias는 Task 11 Step 4).
 - **알려진 트레이드오프**: UI 단위 테스트 없음(빌드+스모크로 대체), 초기 항목 3개는 설계 결정(§6.3 주석), recharts 만기 후 점선은 시리즈 분할 방식.
 - **§6.4 "단독 분석 모드" 해석**: 항목 1개일 때 시나리오 탭만 숨긴다. 종합 탭의 "최적 시점 판정"과 상세 분해는 단독 항목에도 유의미하므로 유지 — 스펙 문구("시점별·세금 탭만")보다 완화한 의도적 결정.
-
 
 
 
