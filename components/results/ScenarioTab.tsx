@@ -22,24 +22,38 @@ export function ScenarioTab(props: { state: ComparisonState; result: CompareResu
             </tr>
           </thead>
           <tbody>
-            {result.scenarioRows.map((row) => (
-              <tr key={row.scenario.atMonths}>
-                <td>{row.scenario.label} ({row.scenario.atMonths}개월)</td>
-                {row.cells.map((cell) => {
-                  const item = state.items.find((it) => it.id === cell.itemId);
-                  if (!item) return <td key={cell.itemId}>—</td>; // state/result 일시 불일치 방어
-                  const v = normalize(cell.snapshot.netCost, item.vehicle.count, cell.snapshot.m, norm);
-                  return (
-                    <td key={cell.itemId} className={row.bestItemId === cell.itemId ? 'best' : ''}>
-                      {fmtMan(v)}원
-                      <div className="muted">
-                        {cell.snapshot.bestExit.label}{cell.snapshot.ended ? ` · 만기 종료 (${cell.snapshot.m}개월 기준)` : ''}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {result.scenarioRows.map((row) => {
+              const displayed = row.cells.map((cell) => {
+                const item = state.items.find((it) => it.id === cell.itemId);
+                return {
+                  cell,
+                  item,
+                  value: item
+                    ? normalize(cell.snapshot.netCost, item.vehicle.count, cell.snapshot.m, norm)
+                    : Infinity,
+                };
+              });
+              const comparable = displayed.filter((x) => x.item && !x.cell.snapshot.ended);
+              const bestItemId = comparable.length > 0
+                ? comparable.reduce((a, b) => b.value < a.value ? b : a).cell.itemId
+                : null;
+              return (
+                <tr key={row.scenario.atMonths}>
+                  <td>{row.scenario.label} ({row.scenario.atMonths}개월)</td>
+                  {displayed.map(({ cell, item, value }) => {
+                    if (!item) return <td key={cell.itemId}>—</td>; // state/result 일시 불일치 방어
+                    return (
+                      <td key={cell.itemId} className={bestItemId === cell.itemId ? 'best' : ''}>
+                        {fmtMan(value)}원
+                        <div className="muted">
+                          {cell.snapshot.bestExit.label}{cell.snapshot.ended ? ` · 만기 종료 (${cell.snapshot.m}개월 기준)` : ''}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
