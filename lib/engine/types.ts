@@ -1,6 +1,8 @@
 // lib/engine/types.ts — 도메인 타입 (스펙 §3). 엔진 전역에서 금액=원, 퍼센트=% 숫자.
 export type Method = 'rent' | 'oplease' | 'finlease' | 'installment';
 export type BizType = 'none' | 'personal' | 'corp';
+export type VatTaxType = 'general' | 'simplified' | 'exempt' | 'mixedOrUncertain';
+export type TaxRuleHorizon = 'approvedOnly' | 'assumeUnchanged';
 export type VehicleCategory =
   | 'passenger' | 'compact' | 'van9' | 'van11' | 'truck' | 'commercial';
 
@@ -9,6 +11,9 @@ export interface Scenario { atMonths: number; label: string }
 
 export interface CommonProfile {
   biz: BizType;
+  vatTaxType: VatTaxType;              // 일반과세자만 VAT 매입세액 공제 검토
+  taxRuleHorizon: TaxRuleHorizon;      // 승인 기간 뒤 세법을 반복할지 여부
+  taxStartDate: string;                // YYYY-MM-DD 계산·차량 사용 시작일
   industryIndex: number;
   revenueIndex: number;
   marginalRateOverride: number | null; // % 숫자. null이면 매핑 사용
@@ -22,7 +27,8 @@ export interface CommonProfile {
 
 export interface Vehicle {
   name: string;
-  price: number;        // 1대 가격, 부가세 포함 소비자가
+  price: number;        // 1대 입력 가격
+  priceIncludesVat: boolean; // 세금계산서 거래 등 입력 가격에 VAT가 포함됨
   isUsed: boolean;      // 메타데이터 — 계산 영향 없음 (스펙 §6.5)
   count: number;        // 대수 ≥ 1
   category: VehicleCategory;
@@ -31,6 +37,8 @@ export interface Vehicle {
 export interface TaxOptions {
   useDrivingLog: boolean;
   bizUsePct: number;
+  hasQualifiedEvidence: boolean;       // 세금계산서 등 적격 증빙·업무 관련성 충족
+  isTaxableBusinessAsset: boolean;     // 일반과세 사업용 자산 매각 시 매출 VAT 적용
   hasDedicatedInsurance: boolean;
   corporatePlateRequired: boolean;
   hasCorporatePlate: boolean;
@@ -52,6 +60,21 @@ export interface ExitTerms {
   buyoutFee: number;      // 인수·소유권 이전 기타비용 (1대당)
 }
 
+export interface MonthlyQuoteBreakdown {
+  financePayment: number | null; // 금융 원리금·차량대금 월납. null이면 자동 계산
+  insurance: number;             // 견적 월납에 포함된 보험료
+  vehicleTax: number;            // 견적 월납에 포함된 자동차세
+  maintenance: number;           // 견적 월납에 포함된 정비비
+  maintenanceBreakdownKnown: boolean; // 운용리스 정비비를 계약서에서 구분할 수 있음
+  serviceFee: number;            // 견적 월납에 포함된 서비스·기타 수수료
+}
+
+export interface AnnualOperatingCosts {
+  insurance: number;
+  vehicleTax: number;
+  maintenance: number;
+}
+
 export interface FinanceItem {
   id: string;
   label?: string;
@@ -63,10 +86,12 @@ export interface FinanceItem {
   deposit: ModeValue | null;      // 1대당 반환형 보증금 (rent/lease)
   residual: ModeValue | null;     // rent/oplease/finlease 만기 잔존가치
   loanAmount: number | null;      // installment만
-  monthlyOverride: number | null; // 실제 견적 월납액. null이면 계산값
+  monthlyQuote: MonthlyQuoteBreakdown;
   upfrontFee: number;             // 1대당 기타 초기비용
-  insuranceYr: number;            // 1대당 연 보험료
-  maintenanceYr: number;          // 1대당 연 정비비
+  insuranceYr: number;            // 월납 외 1대당 연 보험료
+  vehicleTaxYr: number;           // 월납 외 1대당 연 자동차세
+  maintenanceYr: number;          // 월납 외 1대당 연 정비비
+  postFinanceAnnualCosts: AnnualOperatingCosts; // 소유형 금융 종료 후 추가 연 비용
   subsidy: number;                // 1대당 지원금
   acqTaxRatePct: number;   // 취득세율 % 숫자 (예: 7 → 7%)
   tax: TaxOptions;
@@ -82,7 +107,9 @@ export interface ExitOption { kind: ExitKind; label: string; cost: number }
 export interface CostSnapshot {
   m: number;
   ended: boolean;          // rent/oplease가 계약기간을 넘어 만기 값으로 고정됨
-  monthly: number;         // 1대당 월납입금
+  monthly: number;         // 1대당 총 월 현금납입금
+  financeMonthly: number;  // 1대당 금융 원리금·차량대금 월납
+  monthlyAncillary: number;// 1대당 월 보험·자동차세·정비·서비스비
   principal: number;       // 1대당 최초 금융잔액
   sunk: number;            // 항목 전체 누적지출 (×count, tradeIn·부가세환급 반영)
   resaleEach: number;

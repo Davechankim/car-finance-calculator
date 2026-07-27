@@ -5,7 +5,7 @@ import type { ComparisonState } from '@/lib/engine/types';
 import { defaultState } from '@/lib/state/defaults';
 import {
   MAX_IMPORT_BYTES,
-  parsePersistedState,
+  parsePersistedProject,
   serializeState,
   STORAGE_KEY,
 } from '@/lib/state/persistence';
@@ -16,9 +16,16 @@ type Props = {
   dispatch: React.Dispatch<Action>;
   onStatus: (message: string) => void;
   onEnableAutosave: () => void;
+  taxRuleMigrationPending: boolean;
 };
 
-export function ProjectActions({ state, dispatch, onStatus, onEnableAutosave }: Props) {
+export function ProjectActions({
+  state,
+  dispatch,
+  onStatus,
+  onEnableAutosave,
+  taxRuleMigrationPending,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const exportProject = () => {
@@ -48,10 +55,12 @@ export function ProjectActions({ state, dispatch, onStatus, onEnableAutosave }: 
     }
 
     try {
-      const imported = parsePersistedState(await file.text());
-      dispatch({ type: 'replaceState', state: imported });
+      const imported = parsePersistedProject(await file.text());
+      dispatch({ type: 'replaceState', state: imported.state });
       onEnableAutosave();
-      onStatus('프로젝트를 가져왔습니다.');
+      onStatus(imported.taxRuleMismatch
+        ? `이전 세법 규칙(${imported.sourceTaxRuleSetId ?? '알 수 없음'})의 입력을 현재 규칙으로 가져와 다시 계산했습니다.`
+        : '프로젝트를 가져왔습니다.');
     } catch (error) {
       const detail = error instanceof Error ? error.message : '파일 형식을 확인해 주세요.';
       onStatus(`가져오기에 실패했습니다: ${detail}`);
@@ -73,16 +82,27 @@ export function ProjectActions({ state, dispatch, onStatus, onEnableAutosave }: 
   return (
     <div className="project-actions" aria-label="프로젝트 관리">
       <button type="button" className="btn" onClick={exportProject}>내보내기</button>
+      {taxRuleMigrationPending && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            onEnableAutosave();
+            onStatus('복구한 입력을 현재 승인 세법 규칙으로 다시 저장합니다.');
+          }}
+        >
+          현재 세법으로 저장
+        </button>
+      )}
       <button type="button" className="btn" onClick={() => fileInputRef.current?.click()}>
         가져오기
       </button>
       <input
         ref={fileInputRef}
-        className="sr-only"
+        hidden
         type="file"
         accept="application/json,.json"
         onChange={importProject}
-        tabIndex={-1}
       />
       <button type="button" className="btn" onClick={resetProject}>초기화</button>
     </div>

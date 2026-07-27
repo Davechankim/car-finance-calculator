@@ -14,18 +14,25 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "tax:mcp": "node --import tsx mcp/stdio.ts",
+    "tax:mcp:smoke": "node --import tsx scripts/smoke-tax-mcp.ts",
+    "tax:mcp:live-smoke": "node --import tsx scripts/smoke-tax-mcp.ts --live",
+    "verify:adsense-release": "node --import tsx scripts/verify-adsense-release.ts",
     "verify:sites-build": "node scripts/verify-sites-build.mjs",
-    "release:check": "npm test && npm run typecheck && npm run build && npm run verify:sites-build && npm run test:e2e"
+    "release:check": "npm test && npm run tax:mcp:smoke && npm run typecheck && npm run build && npm run verify:sites-build && npm run verify:adsense-release && npm run test:e2e"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "next": "15.5.22",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "recharts": "2.15.4"
+    "recharts": "2.15.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.47.0",
     "@mdx-js/rollup": "3.1.1",
+    "@next/env": "^15.5.22",
     "@playwright/test": "1.62.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -33,6 +40,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "react-server-dom-webpack": "19.2.8",
+    "tsx": "^4.23.1",
     "typescript": "^5.6.0",
     "vinext": "0.0.50",
     "vite": "8.1.5",

@@ -2,8 +2,13 @@
 import { useId, useState } from 'react';
 import { Chips, MoneyInput, NumInput, PctOrAmountInput, SelectInput, Toggle, WarnBadge } from '@/components/ui/Field';
 import { fmtMan } from '@/lib/format';
-import { financials } from '@/lib/engine/costAt';
-import { CATEGORIES, categoryMeta, isExempt } from '@/lib/engine/taxData';
+import {
+  cumulativeFinancePaymentsEach, financials,
+} from '@/lib/engine/costAt';
+import {
+  CATEGORIES, categoryMeta, isBusinessPassengerLimitExempt,
+  isVatInputCreditEligible,
+} from '@/lib/engine/taxData';
 import { resolveAmount } from '@/lib/engine/types';
 import type { CommonProfile, FinanceItem, VehicleCategory } from '@/lib/engine/types';
 import { METHOD_LABELS } from '@/lib/state/defaults';
@@ -24,21 +29,52 @@ export function ItemCard(props: {
   const vehicleNameId = `${contentId}-vehicle-name`;
   const itemNameId = `${contentId}-item-name`;
   const set = (patch: Partial<FinanceItem>) => props.onChange({ ...item, ...patch });
+  const setMonthlyQuote = (patch: Partial<FinanceItem['monthlyQuote']>) =>
+    set({ monthlyQuote: { ...item.monthlyQuote, ...patch } });
+  const setPostFinanceAnnualCosts = (
+    patch: Partial<FinanceItem['postFinanceAnnualCosts']>,
+  ) => set({
+    postFinanceAnnualCosts: {
+      ...item.postFinanceAnnualCosts,
+      ...patch,
+    },
+  });
   const P = item.vehicle.price;
   const downA = resolveAmount(item.down, P);
   const resA = resolveAmount(item.residual, P);
   const hasResidual = item.method !== 'installment';
   const hasRefundableDeposit = item.method !== 'installment';
   const owns = item.method === 'finlease' || item.method === 'installment';
-  const taxLimitExempt = isExempt(item.vehicle.category);
+  const hasResaleExit = owns || item.method === 'oplease';
+  const taxLimitExempt =
+    isBusinessPassengerLimitExempt(item.vehicle.category);
+  const vatCategoryEligible = isVatInputCreditEligible(item.vehicle.category);
   const complianceApplies = common.biz !== 'none' && !taxLimitExempt;
   const insuranceRequired =
     complianceApplies &&
     (common.biz === 'corp' || (common.biz === 'personal' && common.personalInsuranceRequired));
   const derived = financials(item);
   const calculatedMonthly = derived.calculatedMonthly;
+  const hasQuotedMonthly =
+    item.monthlyQuote.financePayment != null || derived.monthlyAncillary > 0;
+  const financePaymentLabel =
+    item.method === 'installment'
+      ? '월 금융 원리금'
+      : item.method === 'rent'
+        ? '월 차량대금·렌트료'
+        : '월 금융·리스료';
   const upfrontExceedsPrice = downA + item.subsidy > P;
   const residualCapped = hasResidual && resA > derived.resEach + 0.5;
+  const quotedFinanceTotal = derived.financeMonthly * item.months;
+  const cappedFinanceTotal = cumulativeFinancePaymentsEach(item, item.months);
+  const installmentPaysOffEarly =
+    item.method === 'installment' &&
+    cappedFinanceTotal + 0.5 < quotedFinanceTotal;
+  const duplicateAnnualCostLabels = [
+    item.monthlyQuote.insurance > 0 && item.insuranceYr > 0 ? '보험' : null,
+    item.monthlyQuote.vehicleTax > 0 && item.vehicleTaxYr > 0 ? '자동차세' : null,
+    item.monthlyQuote.maintenance > 0 && item.maintenanceYr > 0 ? '정비' : null,
+  ].filter((label): label is string => label != null);
 
   const title = item.label?.trim()
     || `${METHOD_LABELS[item.method]}${item.vehicle.isUsed ? ' · 중고' : ''}` +
@@ -85,7 +121,9 @@ export function ItemCard(props: {
               onChange={(count) => set({ vehicle: { ...item.vehicle, count: Math.max(1, Math.round(count)) } })} />
           </div>
           <div className="row">
-            <MoneyInput label="차량 가격 (1대, 부가세 포함)" value={P}
+            <MoneyInput
+              label={`차량 가격 (1대${item.vehicle.priceIncludesVat ? ' · VAT 포함' : ' · VAT 없음'})`}
+              value={P}
               onChange={(price) => set({ vehicle: { ...item.vehicle, price } })} />
             <SelectInput
               label="차량 분류"
@@ -107,6 +145,14 @@ export function ItemCard(props: {
               options={[{ key: 'new', label: '신차' }, { key: 'used', label: '중고차' }]}
               onChange={(k) => set({ vehicle: { ...item.vehicle, isUsed: k === 'used' } })}
             />
+            {owns && (
+              <Toggle
+                label="입력 가격에 VAT 포함"
+                checked={item.vehicle.priceIncludesVat}
+                onChange={(priceIncludesVat) =>
+                  set({ vehicle: { ...item.vehicle, priceIncludesVat } })}
+              />
+            )}
           </div>
 
           <div className="section-label">{owns ? '금융 조건' : '계약 조건'}</div>
@@ -151,31 +197,119 @@ export function ItemCard(props: {
 
           <div className="row">
             <MoneyInput
-              label="실제 견적 월납액 (1대당 · 0 = 자동계산)"
-              value={item.monthlyOverride ?? 0}
-              onChange={(monthlyOverride) => set({
-                monthlyOverride: monthlyOverride > 0 ? monthlyOverride : null,
+              label={`${financePaymentLabel} (1대당 · 0 = 자동계산)`}
+              value={item.monthlyQuote.financePayment ?? 0}
+              onChange={(financePayment) => setMonthlyQuote({
+                financePayment: financePayment > 0 ? financePayment : null,
               })}
             />
             <MoneyInput label="기타 초기비용 (1대당)" value={item.upfrontFee}
               onChange={(upfrontFee) => set({ upfrontFee })} />
           </div>
-          {item.monthlyOverride != null && (
+          {item.monthlyQuote.financePayment != null && (
             <p className="muted" style={{ marginBottom: 8 }}>
-              자동 산식 월납액은 {fmtMan(calculatedMonthly)}원입니다.
-              {item.method === 'rent'
-                ? ' 결과 현금흐름에는 실제 견적을 우선 적용합니다.'
-                : ' 입력값과의 차이는 중도·만기 금융잔액에도 반영합니다.'}
+              자동 산식의 금융·차량대금 월납은 {fmtMan(calculatedMonthly)}원입니다.
+              입력한 금융 원리금만 잔여채무와 중도·만기 정산에 반영합니다.
+              {installmentPaysOffEarly && (
+                <>
+                  {' '}조기 완납되는 입력이므로 누적 금융납입은
+                  {' '}{fmtMan(cappedFinanceTotal)}원에서 멈춥니다.
+                </>
+              )}
             </p>
           )}
 
-          <div className="section-label">연간 비용 (1대당)</div>
+          <div className="section-label">견적 월납에 포함된 부대비용 (1대당)</div>
+          <div className="row">
+            <MoneyInput label="월 보험료 포함분" value={item.monthlyQuote.insurance}
+              onChange={(insurance) => setMonthlyQuote({ insurance })} />
+            <MoneyInput label="월 자동차세 포함분" value={item.monthlyQuote.vehicleTax}
+              onChange={(vehicleTax) => setMonthlyQuote({ vehicleTax })} />
+          </div>
+          <div className="row">
+            <MoneyInput label="월 정비비 포함분" value={item.monthlyQuote.maintenance}
+              onChange={(maintenance) => setMonthlyQuote({ maintenance })} />
+            <MoneyInput label="월 서비스·기타 수수료" value={item.monthlyQuote.serviceFee}
+              onChange={(serviceFee) => setMonthlyQuote({ serviceFee })} />
+          </div>
+          {item.method === 'oplease' && (
+            <div className="row">
+              <Toggle
+                label="계약서에서 정비비 구분 가능"
+                checked={item.monthlyQuote.maintenanceBreakdownKnown}
+                onChange={(maintenanceBreakdownKnown) =>
+                  setMonthlyQuote({ maintenanceBreakdownKnown })}
+              />
+              {!item.monthlyQuote.maintenanceBreakdownKnown && (
+                item.monthlyQuote.maintenance > 0 ? (
+                  <WarnBadge>
+                    입력한 월 정비비는 현금흐름에만 반영됩니다. 세무 계산에는
+                    입력액 대신 보험·자동차세 차감 후 7% 대체규칙을 적용합니다.
+                  </WarnBadge>
+                ) : (
+                  <WarnBadge>정비비 미구분: 보험·자동차세 차감 후 7% 적용</WarnBadge>
+                )
+              )}
+            </div>
+          )}
+          {hasQuotedMonthly && (
+            <p className="muted" style={{ marginBottom: 8 }}>
+              실제 총 월 현금납입은 {fmtMan(derived.monthly)}원입니다.
+              보험·자동차세·정비·서비스비는 금융잔액을 줄이지 않습니다.
+            </p>
+          )}
+
+          <div className="section-label">
+            월납 외 별도 연간 비용 (1대당 · 보유기간 전체)
+          </div>
           <div className="row">
             <MoneyInput label="보험료 (연)" value={item.insuranceYr}
               onChange={(insuranceYr) => set({ insuranceYr })} />
+            <MoneyInput label="자동차세 (연)" value={item.vehicleTaxYr}
+              onChange={(vehicleTaxYr) => set({ vehicleTaxYr })} />
+          </div>
+          <div className="row">
             <MoneyInput label="정비비 (연)" value={item.maintenanceYr}
               onChange={(maintenanceYr) => set({ maintenanceYr })} />
           </div>
+          {duplicateAnnualCostLabels.length > 0 && (
+            <div className="row">
+              <WarnBadge>
+                {duplicateAnnualCostLabels.join('·')} 비용이 월납 포함분과 별도 연간비용에
+                모두 입력되어 중복 합산됩니다.
+              </WarnBadge>
+            </div>
+          )}
+          {owns && (
+            <>
+              <div className="section-label">
+                금융 종료 후 추가 연간 비용 (1대당)
+              </div>
+              <div className="row">
+                <MoneyInput
+                  label="종료 후 추가 보험료 (연)"
+                  value={item.postFinanceAnnualCosts.insurance}
+                  onChange={(insurance) => setPostFinanceAnnualCosts({ insurance })}
+                />
+                <MoneyInput
+                  label="종료 후 추가 자동차세 (연)"
+                  value={item.postFinanceAnnualCosts.vehicleTax}
+                  onChange={(vehicleTax) => setPostFinanceAnnualCosts({ vehicleTax })}
+                />
+              </div>
+              <div className="row">
+                <MoneyInput
+                  label="종료 후 추가 정비비 (연)"
+                  value={item.postFinanceAnnualCosts.maintenance}
+                  onChange={(maintenance) => setPostFinanceAnnualCosts({ maintenance })}
+                />
+              </div>
+              <p className="muted" style={{ marginBottom: 8 }}>
+                금융기간 중 월납에 포함되다가 종료 뒤 직접 부담하는 비용을 입력하세요.
+                위의 보유기간 전체 연간비용에 추가로 합산됩니다.
+              </p>
+            </>
+          )}
 
           {common.biz !== 'none' && (
             <>
@@ -194,6 +328,46 @@ export function ItemCard(props: {
                 <p className="muted" style={{ marginBottom: 8 }}>
                   한도 제외 차량은 업무사용비율 미입력 시 100% 업무사용으로 가정합니다.
                 </p>
+              )}
+              {vatCategoryEligible && (
+                <div className="row">
+                  <Toggle
+                    label="VAT 적격 증빙 수취·업무 관련성 충족"
+                    checked={item.tax.hasQualifiedEvidence}
+                    onChange={(hasQualifiedEvidence) =>
+                      set({ tax: { ...item.tax, hasQualifiedEvidence } })}
+                  />
+                  {common.vatTaxType === 'general' &&
+                    !item.tax.hasQualifiedEvidence && (
+                      <WarnBadge>적격 증빙 미확인으로 VAT 환급 0원 처리</WarnBadge>
+                    )}
+                </div>
+              )}
+              {common.vatTaxType !== 'exempt' && hasResaleExit && (
+                <div className="row">
+                  <Toggle
+                    label="과세사업용 자산 (매각 시 매출 VAT)"
+                    checked={item.tax.isTaxableBusinessAsset}
+                    onChange={(isTaxableBusinessAsset) =>
+                      set({ tax: { ...item.tax, isTaxableBusinessAsset } })}
+                  />
+                  {!item.tax.isTaxableBusinessAsset && (
+                    <WarnBadge>매각 시 VAT를 차감하지 않음</WarnBadge>
+                  )}
+                  {item.tax.isTaxableBusinessAsset &&
+                    common.vatTaxType === 'simplified' && (
+                      <WarnBadge>
+                        매각 VAT는 선택한 업종별 간이과세 산식으로 추정합니다.
+                      </WarnBadge>
+                    )}
+                  {item.tax.isTaxableBusinessAsset &&
+                    common.vatTaxType === 'mixedOrUncertain' && (
+                      <WarnBadge>
+                        겸영·불확실 매각 VAT는 과소계상 방지를 위해 일반세율
+                        (부가세 포함가의 10/110) 보수값을 적용합니다.
+                      </WarnBadge>
+                    )}
+                </div>
               )}
               {insuranceRequired && (
                 <div className="row">

@@ -29,6 +29,26 @@ describe('reducer (스펙 §6.2)', () => {
     const s = reducer(defaultState(), { type: 'setCommon', patch: { biz: 'corp' } });
     expect(s.common.biz).toBe('corp');
   });
+  it('법인과 간이과세의 불가능한 조합을 setCommon·replaceState에서 차단한다', () => {
+    const simplifiedPersonal = reducer(defaultState(), {
+      type: 'setCommon',
+      patch: { biz: 'personal', vatTaxType: 'simplified' },
+    });
+    const switchedToCorp = reducer(simplifiedPersonal, {
+      type: 'setCommon',
+      patch: { biz: 'corp' },
+    });
+    expect(switchedToCorp.common.vatTaxType).toBe('general');
+
+    const invalidReplacement = structuredClone(defaultState());
+    invalidReplacement.common.biz = 'corp';
+    invalidReplacement.common.vatTaxType = 'simplified';
+    const replaced = reducer(defaultState(), {
+      type: 'replaceState',
+      state: invalidReplacement,
+    });
+    expect(replaced.common.vatTaxType).toBe('general');
+  });
   it('addItem / removeItem / duplicateItem / replaceItem', () => {
     let s = defaultState();
     s = reducer(s, { type: 'addItem', item: newItem('finlease') });

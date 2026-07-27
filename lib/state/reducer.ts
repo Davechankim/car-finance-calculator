@@ -14,12 +14,27 @@ export type Action =
   | { type: 'duplicateItem'; id: string; newId: string }
   | { type: 'removeItem'; id: string };
 
+function normalizeCommonProfile(common: CommonProfile): CommonProfile {
+  return common.biz === 'corp' && common.vatTaxType === 'simplified'
+    ? { ...common, vatTaxType: 'general' }
+    : common;
+}
+
 export function reducer(state: ComparisonState, action: Action): ComparisonState {
   switch (action.type) {
-    case 'replaceState':
-      return action.state;
-    case 'setCommon':
-      return { ...state, common: { ...state.common, ...action.patch } };
+    case 'replaceState': {
+      const common = normalizeCommonProfile(action.state.common);
+      return common === action.state.common
+        ? action.state
+        : { ...action.state, common };
+    }
+    case 'setCommon': {
+      const common = normalizeCommonProfile({
+        ...state.common,
+        ...action.patch,
+      });
+      return { ...state, common };
+    }
     case 'addScenario':
       return {
         ...state,

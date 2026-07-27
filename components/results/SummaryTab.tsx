@@ -75,6 +75,7 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
         <p className="muted">
           장기렌트·운용리스가 목표 보유기간 전에 끝나면 최적 선정에서 제외합니다.
           금융리스·할부는 금융기간 후 월납을 멈추고 보유비용·세금·시세를 계속 반영합니다.
+          종료 후 추가 연간비용을 입력하면 금융 종료 시점부터 더합니다.
           음수는 매각차익이 비용을 초과한다는 뜻입니다.
         </p>
       </div>
@@ -93,10 +94,13 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
                 </tr>
               ))}
             </tbody>
-          </table>
+        </table>
         </div>
         <p className="muted" style={{ marginTop: 6 }}>
-          {atTarget.map((x) => `${METHOD_LABELS[x.item.method]} 계약·금융 월납 ${fmtMan(x.s.monthly)}원`).join(' · ')}
+          {atTarget.map((x) =>
+            `${METHOD_LABELS[x.item.method]} 총 월납 ${fmtMan(x.s.monthly)}원` +
+            ` (금융·차량대금 ${fmtMan(x.s.financeMonthly)}원)`,
+          ).join(' · ')}
         </p>
       </div>
     </>

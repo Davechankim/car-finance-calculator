@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  financials, remainingDebtEach, sunkAt, vatRefundCumEach,
+  cumulativeFinancePaymentsEach, financials, remainingDebtEach, sunkAt,
+  vatRefundCumEach,
 } from '../costAt';
 import { baseCommon, baseItem } from './fixtures';
 
@@ -39,6 +40,18 @@ describe('financials — 방식별 금융 구조 (스펙 §4.2)', () => {
       .toBe(Math.max(Math.round((40_000_000 / 1.1) * 0.04) - 750_000, 0));
   });
 
+  it('VAT 없는 개인 간 중고차 가격은 전액을 취득세 과표로 사용한다', () => {
+    const usedPrivateSale = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        isUsed: true,
+        priceIncludesVat: false,
+      },
+      acqTaxRatePct: 7,
+    });
+    expect(financials(usedPrivateSale).acqTaxEach).toBe(2_800_000);
+  });
+
   it('엣지: 과도한 잔존은 무납입 만기잔액으로 제한해 가상 채무를 만들지 않는다', () => {
     const item = baseItem('finlease', {
       down: { mode: 'pct', value: 80 },
@@ -52,16 +65,47 @@ describe('financials — 방식별 금융 구조 (스펙 §4.2)', () => {
     expect(f.resEach).toBeLessThan(12_000_000);
   });
 
-  it('실제 견적 월납액은 표시·현금흐름에 쓰되 계산 월납액과 금융원금은 보존', () => {
+  it('실제 금융 월납은 표시·현금흐름에 쓰되 계산 월납액과 금융원금은 보존', () => {
     const baseline = financials(baseItem('oplease'));
-    const quoted = financials(baseItem('oplease', { monthlyOverride: 990_000 }));
+    const quoted = financials(baseItem('oplease', {
+      monthlyQuote: {
+        ...baseItem('oplease').monthlyQuote,
+        financePayment: 990_000,
+      },
+    }));
     expect(quoted.monthly).toBe(990_000);
+    expect(quoted.financeMonthly).toBe(990_000);
     expect(quoted.calculatedMonthly).toBeCloseTo(baseline.calculatedMonthly, 6);
     expect(quoted.principal).toBe(baseline.principal);
   });
-  it('실제 견적 월납액이 낮으면 그 차이를 만기 금융잔액으로 보존', () => {
-    const item = baseItem('installment', { monthlyOverride: 1 });
+  it('실제 금융 월납이 낮으면 그 차이를 만기 금융잔액으로 보존', () => {
+    const item = baseItem('installment', {
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        financePayment: 1,
+      },
+    });
     expect(remainingDebtEach(item, item.months)).toBeGreaterThan(item.vehicle.price);
+  });
+  it('월 부대비용은 현금유출을 늘리지만 금융잔액을 줄이지 않는다', () => {
+    const base = baseItem('oplease', {
+      monthlyQuote: {
+        ...baseItem('oplease').monthlyQuote,
+        financePayment: 700_000,
+      },
+    });
+    const withService = baseItem('oplease', {
+      monthlyQuote: {
+        ...base.monthlyQuote,
+        serviceFee: 200_000,
+        insurance: 100_000,
+      },
+    });
+    expect(financials(withService).financeMonthly).toBe(700_000);
+    expect(financials(withService).monthly).toBe(1_000_000);
+    expect(remainingDebtEach(withService, 24)).toBeCloseTo(remainingDebtEach(base, 24), 6);
+    expect(sunkAt(withService, baseCommon(), 24) - sunkAt(base, baseCommon(), 24))
+      .toBe(300_000 * 24);
   });
   it('VAT 공제 가능 사업용 차량의 취득세 과표는 환급 VAT를 제외', () => {
     const truck = baseItem('installment', {
@@ -96,6 +140,148 @@ describe('vatRefundCumEach — 부가세 환급 (스펙 §4.2 각주2, 케이스
     expect(vatRefundCumEach(baseItem('rent'), biz, 12)).toBe(0); // passenger
     const truck = baseItem('installment', { vehicle: { ...baseItem('installment').vehicle, category: 'truck' } });
     expect(vatRefundCumEach(truck, baseCommon(), 12)).toBe(0); // biz none
+  });
+  it('렌트의 월 보험·자동차세 포함분에는 VAT 환급을 만들지 않는다', () => {
+    const item = baseItem('rent', {
+      vehicle: { ...baseItem('rent').vehicle, category: 'truck' },
+      monthlyQuote: {
+        financePayment: 1_000_000,
+        insurance: 100_000,
+        vehicleTax: 50_000,
+        maintenance: 30_000,
+        maintenanceBreakdownKnown: true,
+        serviceFee: 20_000,
+      },
+    });
+    expect(vatRefundCumEach(item, biz, 12))
+      .toBeCloseTo((1_000_000 + 30_000 + 20_000) * 12 * (10 / 110), 4);
+  });
+  it('일반과세·VAT 적격 차종·적격증빙을 모두 충족할 때만 환급한다', () => {
+    const truck = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+      },
+    });
+    const expected = 40_000_000 * (10 / 110);
+    expect(vatRefundCumEach(truck, biz, 0)).toBeCloseTo(expected, 4);
+    expect(vatRefundCumEach(
+      { ...truck, tax: { ...truck.tax, hasQualifiedEvidence: false } },
+      biz,
+      0,
+    )).toBe(0);
+    for (const vatTaxType of [
+      'simplified', 'exempt', 'mixedOrUncertain',
+    ] as const) {
+      expect(vatRefundCumEach(
+        truck,
+        baseCommon({ biz: 'personal', vatTaxType }),
+        0,
+      )).toBe(0);
+    }
+  });
+  it('별도 연간 정비비와 금융 종료 후 추가 정비비의 VAT도 누적 환급한다', () => {
+    const item = baseItem('installment', {
+      months: 12,
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+      },
+      maintenanceYr: 1_100_000,
+      postFinanceAnnualCosts: {
+        insurance: 0,
+        vehicleTax: 0,
+        maintenance: 2_200_000,
+      },
+    });
+    expect(vatRefundCumEach(item, biz, 24)).toBeCloseTo(
+      (40_000_000 + 1_100_000 * 2 + 2_200_000) * (10 / 110),
+      4,
+    );
+  });
+
+  it('VAT 적격 렌트 선납금은 초기 매입 VAT로 환급한다', () => {
+    const item = baseItem('rent', {
+      vehicle: {
+        ...baseItem('rent').vehicle,
+        category: 'truck',
+      },
+      down: { mode: 'amount', value: 11_000_000 },
+    });
+    expect(vatRefundCumEach(item, biz, 0)).toBeCloseTo(1_000_000, 4);
+  });
+
+  it('VAT 적격 소유형의 월 정비비도 연간 정비비와 같은 순액·환급을 적용한다', () => {
+    const monthly = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+      },
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        maintenance: 110_000,
+      },
+    });
+    const annual = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+      },
+      maintenanceYr: 1_320_000,
+    });
+    const vehicleRefund = 40_000_000 * (10 / 110);
+    expect(vatRefundCumEach(monthly, biz, 12) - vehicleRefund)
+      .toBeCloseTo(120_000, 4);
+    expect(vatRefundCumEach(annual, biz, 12) - vehicleRefund)
+      .toBeCloseTo(120_000, 4);
+  });
+
+  it('VAT 없는 차량 가격에는 매입 VAT 환급을 만들지 않는다', () => {
+    const item = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+        priceIncludesVat: false,
+      },
+    });
+    expect(vatRefundCumEach(item, biz, 0)).toBe(0);
+  });
+
+  it('approvedOnly는 렌트 선납 거래 뒤 월·연 VAT 환급을 승인 잔여기간까지만 반영한다', () => {
+    const item = baseItem('rent', {
+      vehicle: {
+        ...baseItem('rent').vehicle,
+        category: 'truck',
+      },
+      down: { mode: 'amount', value: 11_000_000 },
+      monthlyQuote: {
+        ...baseItem('rent').monthlyQuote,
+        financePayment: 1_100_000,
+      },
+      maintenanceYr: 1_320_000,
+    });
+    const approvedOnly = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'approvedOnly',
+      taxStartDate: '2026-12-31',
+    });
+    const applicableMonths = 1 / 31;
+    expect(vatRefundCumEach(item, approvedOnly, 48)).toBeCloseTo(
+      (
+        11_000_000
+        + 1_100_000 * applicableMonths
+        + 1_320_000 * (applicableMonths / 12)
+      ) * (10 / 110),
+      4,
+    );
+    expect(vatRefundCumEach(
+      item,
+      { ...approvedOnly, taxRuleHorizon: 'assumeUnchanged' },
+      48,
+    )).toBeCloseTo(
+      (11_000_000 + 1_100_000 * 48 + 1_320_000 * 4) * (10 / 110),
+      4,
+    );
   });
 });
 
@@ -152,5 +338,64 @@ describe('sunkAt — 누적지출 (스펙 §4.3)', () => {
       const at60 = sunkAt(item, baseCommon(), 60);
       expect(at60 - at36).toBeCloseTo((1_200_000 + 600_000) * 2, 4);
     }
+  });
+  it('종료 후 추가 연간비용은 소유형 금융 만기 뒤부터만 기존 연간비용에 더한다', () => {
+    const item = baseItem('installment', {
+      months: 36,
+      insuranceYr: 1_200_000,
+      vehicleTaxYr: 600_000,
+      postFinanceAnnualCosts: {
+        insurance: 1_200_000,
+        vehicleTax: 600_000,
+        maintenance: 600_000,
+      },
+    });
+    const at36 = sunkAt(item, baseCommon(), 36);
+    const at60 = sunkAt(item, baseCommon(), 60);
+    const withoutPostFinanceCosts = baseItem('installment', {
+      months: 36,
+      insuranceYr: 1_200_000,
+      vehicleTaxYr: 600_000,
+    });
+    expect(at36).toBeCloseTo(
+      sunkAt(withoutPostFinanceCosts, baseCommon(), 36),
+      4,
+    );
+    expect(at60 - sunkAt(withoutPostFinanceCosts, baseCommon(), 60))
+      .toBeCloseTo(2_400_000 * 2, 4);
+    expect(at60 - at36).toBeCloseTo(
+      (1_800_000 + 2_400_000) * 2,
+      4,
+    );
+  });
+});
+
+describe('cumulativeFinancePaymentsEach — 실제 누적 금융납입 상한', () => {
+  it('과도한 할부 월납은 최종 잔액까지만 내고 조기 완납 뒤 중단한다', () => {
+    const item = baseItem('installment', {
+      ratePct: 0,
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        financePayment: 10_000_000,
+      },
+    });
+    expect(cumulativeFinancePaymentsEach(item, 2)).toBe(20_000_000);
+    expect(cumulativeFinancePaymentsEach(item, 12)).toBe(40_000_000);
+    expect(cumulativeFinancePaymentsEach(item, 48)).toBe(40_000_000);
+    expect(remainingDebtEach(item, 12)).toBe(0);
+    expect(sunkAt(item, baseCommon(), 48)).toBeCloseTo(
+      financials(item).acqTaxEach + 40_000_000,
+      4,
+    );
+  });
+
+  it('balloon 리스는 기존 약정 월납 누적 규약을 유지한다', () => {
+    const item = baseItem('finlease', {
+      monthlyQuote: {
+        ...baseItem('finlease').monthlyQuote,
+        financePayment: 10_000_000,
+      },
+    });
+    expect(cumulativeFinancePaymentsEach(item, 24)).toBe(240_000_000);
   });
 });

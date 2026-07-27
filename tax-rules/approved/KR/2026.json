@@ -1,0 +1,329 @@
+{
+  "snapshotVersion": 1,
+  "id": "KR-2026-car-finance",
+  "jurisdiction": "KR",
+  "year": 2026,
+  "status": "approved",
+  "effectiveFrom": "2026-01-01",
+  "effectiveThrough": "2026-12-31",
+  "approvedAt": "2026-07-28T00:00:00+09:00",
+  "approvedBy": "repository-maintainer",
+  "sourceUrl": "https://www.law.go.kr",
+  "rules": {
+    "businessPassengerCar": {
+      "annualCostLimitWon": 15000000,
+      "annualDepreciationLimitWon": 8000000,
+      "smallRealEstateCorpAnnualCostLimitWon": 5000000,
+      "smallRealEstateCorpAnnualDepreciationLimitWon": 4000000
+    },
+    "vat": {
+      "includedTaxNumerator": 10,
+      "includedPriceDenominator": 110,
+      "inputCreditRequiresGeneralTaxpayer": true,
+      "inputCreditRequiresQualifiedEvidence": true,
+      "resaleOutputVatAppliesToGeneralTaxableBusinessAsset": true,
+      "resaleOutputVatUsesGeneralRateWhenMixedOrUncertain": true,
+      "simplifiedResaleOutputVatValueAddedRateByIndustry": {
+        "service": 0.4,
+        "retail": 0.15,
+        "manufacturing": 0.2,
+        "foodOrLodging": 0.25,
+        "transport": 0.3,
+        "realEstateRental": 0.4
+      }
+    },
+    "depreciation": {
+      "years": 5,
+      "equivalentRateByMethod": {
+        "rent": 0.7
+      },
+      "operatingLeaseUnknownMaintenanceRate": 0.07
+    },
+    "compactAcquisitionTaxRelief": {
+      "amountWon": 750000,
+      "effectiveThrough": "2027-12-31"
+    },
+    "acquisitionTaxDefaultPct": {
+      "passenger": 7,
+      "compact": 4,
+      "van9": 7,
+      "van11": 5,
+      "truck": 5,
+      "commercial": 4
+    },
+    "businessPassengerCostLimitExemptByCategory": {
+      "passenger": false,
+      "compact": true,
+      "van9": true,
+      "van11": true,
+      "truck": true,
+      "commercial": true
+    },
+    "vatInputCreditEligibleByCategory": {
+      "passenger": false,
+      "compact": true,
+      "van9": true,
+      "van11": true,
+      "truck": true,
+      "commercial": true
+    },
+    "estimatedMarginalRateByRevenueBand": {
+      "personal": [0.06, 0.15, 0.15, 0.24, 0.35, 0.38, 0.4],
+      "corp": [0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2]
+    }
+  },
+  "provenance": [
+    {
+      "sourceId": "corporate-car-cost-limits",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1032460789",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "businessPassengerCar.annualCostLimitWon",
+        "businessPassengerCar.annualDepreciationLimitWon",
+        "depreciation.years"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "personal-car-cost-limits",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/소득세법시행령/제78조의3",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "businessPassengerCar.annualCostLimitWon",
+        "businessPassengerCar.annualDepreciationLimitWon",
+        "depreciation.years"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "small-real-estate-corp-car-limits",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/법인세법시행령/제42조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "businessPassengerCar.smallRealEstateCorpAnnualCostLimitWon",
+        "businessPassengerCar.smallRealEstateCorpAnnualDepreciationLimitWon"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "corporate-rental-depreciation-equivalent",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?lspttninfSeq=58911",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "depreciation.equivalentRateByMethod.rent",
+        "depreciation.operatingLeaseUnknownMaintenanceRate"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "personal-rental-depreciation-equivalent",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0042&lsiSeq=284987&urlMode=lsScJoRltInfoR",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "depreciation.equivalentRateByMethod.rent",
+        "depreciation.operatingLeaseUnknownMaintenanceRate"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "acquisition-tax-rates",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://law.go.kr/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1032782819",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "acquisitionTaxDefaultPct"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "vehicle-classification-for-acquisition-tax",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1028890545",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "acquisitionTaxDefaultPct"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "vehicle-use-classification-for-acquisition-tax",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/지방세법시행령/제23조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "acquisitionTaxDefaultPct"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "compact-acquisition-tax-relief",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1018270819",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "compactAcquisitionTaxRelief.amountWon",
+        "compactAcquisitionTaxRelief.effectiveThrough"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "compact-acquisition-tax-eligibility",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/지방세특례제한법시행령/제31조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "compactAcquisitionTaxRelief.amountWon",
+        "compactAcquisitionTaxRelief.effectiveThrough"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "value-added-tax-rate",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/부가가치세법/제30조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.includedTaxNumerator"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "value-added-tax-included-price-fraction",
+      "authority": "대한민국 국세청 세법해석정보시스템",
+      "sourceUrl": "https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=010000000000026641",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.includedPriceDenominator"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "value-added-tax-input-credit-base",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/부가가치세법/제38조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.inputCreditRequiresGeneralTaxpayer"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "value-added-tax-input-credit-exclusions",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://law.go.kr/lsLinkCommonInfo.do?lsJoLnkSeq=1022765485",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.inputCreditRequiresQualifiedEvidence",
+        "vatInputCreditEligibleByCategory"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "individual-consumption-tax-passenger-car-definition",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1029617925",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "businessPassengerCostLimitExemptByCategory",
+        "vatInputCreditEligibleByCategory"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "value-added-tax-direct-business-vehicle-use",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0078&lsiSeq=283641&urlMode=lsScJoRltInfoR",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vatInputCreditEligibleByCategory"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "taxable-business-asset-resale-output-vat",
+      "authority": "대한민국 국세청 세법해석정보시스템",
+      "sourceUrl": "https://taxlaw.nts.go.kr/qt/USEQTA002P.do?ntstDcmId=010000000000153412",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.resaleOutputVatAppliesToGeneralTaxableBusinessAsset"
+      ],
+      "basis": "direct",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "simplified-taxpayer-resale-output-vat",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/LSW/lsSideInfoP.do?docCls=jo&joBrNo=00&joNo=0111&lsiSeq=283641&urlMode=lsScJoRltInfoR",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.simplifiedResaleOutputVatValueAddedRateByIndustry"
+      ],
+      "basis": "derived",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "mixed-or-uncertain-resale-output-vat-policy",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://www.law.go.kr/법령/부가가치세법/제30조",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "vat.resaleOutputVatUsesGeneralRateWhenMixedOrUncertain"
+      ],
+      "basis": "heuristic",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "corporate-tax-rate-guide",
+      "authority": "대한민국 국세청",
+      "sourceUrl": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?cntntsId=7746&mi=2220",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "estimatedMarginalRateByRevenueBand.corp"
+      ],
+      "basis": "heuristic",
+      "verification": "source-citation-cross-check"
+    },
+    {
+      "sourceId": "personal-income-tax-guide",
+      "authority": "대한민국 법제처 국가법령정보센터",
+      "sourceUrl": "https://law.go.kr/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1026637493",
+      "retrievedAt": "2026-07-28",
+      "scope": [
+        "estimatedMarginalRateByRevenueBand.personal"
+      ],
+      "basis": "heuristic",
+      "verification": "source-citation-cross-check"
+    }
+  ],
+  "notes": [
+    "이 스냅샷은 계산 엔진의 2026 상수와 동일한 승인 데이터다.",
+    "업무용승용차 비용 한도 제외 여부와 VAT 매입세액 공제 가능 차종 여부는 독립 규칙으로 관리한다.",
+    "사업용 자산 매각의 매출 VAT는 취득 당시 매입 VAT 공제 여부와 독립적으로 관리한다.",
+    "간이과세자의 자산 매각 VAT는 선택 업종의 부가가치율과 법정세율을 곱해 추정한다. 서비스 통합 항목은 관련 법정 구분의 최대 40%, 음식·숙박 통합 항목은 최대 25%, 운수 통합 항목은 최대 30%를 사용해 과소계상을 막는다.",
+    "겸영·불확실 유형의 과세사업용 자산 매각은 과소계상 방지를 위해 일반세율을 보수적으로 적용한다.",
+    "매출 구간별 한계세율은 과세표준 세율표 자체가 아니라 계산기용 보수적 휴리스틱이다.",
+    "source-citation-cross-check는 공식 출처와 계산 규칙의 연결을 확인했다는 뜻이며 세무사의 개별 사실판단을 대신하지 않는다.",
+    "법령 MCP 조회 결과는 이 스냅샷을 자동 변경하지 않으며 유지관리자의 검토와 테스트가 필요하다."
+  ]
+}
