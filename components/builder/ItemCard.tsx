@@ -56,7 +56,7 @@ export function ItemCard(props: {
         <span className="method-dot" aria-hidden="true" style={{ background: METHOD_COLORS[item.method] }} />
         <span className="title" id={titleId}>{props.index + 1}. {title}</span>
         <span className="sub">
-          {fmtMan(P)} · {item.months}개월 · {item.vehicle.count}대
+          {fmtMan(P)} · {owns ? '금융' : '계약'} {item.months}개월 · {item.vehicle.count}대
           <span aria-hidden="true"> {open ? '▲' : '▼'}</span>
         </span>
       </button>
@@ -109,9 +109,9 @@ export function ItemCard(props: {
             />
           </div>
 
-          <div className="section-label">계약</div>
+          <div className="section-label">{owns ? '금융 조건' : '계약 조건'}</div>
           <div className="row">
-            <NumInput label="기간" suffix="개월" step={6} min={12} max={120} integer value={item.months}
+            <NumInput label={owns ? '금융기간' : '계약기간'} suffix="개월" step={6} min={12} max={120} integer value={item.months}
               onChange={(months) => set({ months })} />
             <NumInput label="금리" suffix="%" step={0.1} min={0} max={15} value={item.ratePct}
               onChange={(ratePct) => set({ ratePct })} />

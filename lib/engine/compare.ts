@@ -1,6 +1,7 @@
 // lib/engine/compare.ts — N항목 비교·최적 탐색·시나리오 (스펙 §5)
 import { costAt } from './snapshot';
 import type { ComparisonState, CostSnapshot, Scenario } from './types';
+import { isOwnershipMethod } from './types';
 
 const GRID_STEP = 3;
 
@@ -24,11 +25,22 @@ export function compareAll(state: ComparisonState): CompareResult {
   if (items.length === 0)
     return { horizon: 0, gridMonths: [], series: [], scenarioRows: [] };
 
-  const horizon = Math.max(...items.map((i) => i.months));
+  const requestedHorizon = Math.max(
+    common.targetMonths,
+    ...common.scenarios.map((scenario) => scenario.atMonths),
+  );
+  const horizon = Math.max(
+    requestedHorizon,
+    ...items.map((item) => item.months),
+  );
   const gridSet = new Set<number>();
   for (let m = 0; m <= horizon; m += GRID_STEP) gridSet.add(m);
   gridSet.add(horizon);
-  for (const item of items) gridSet.add(item.months);
+  gridSet.add(common.targetMonths);
+  for (const scenario of common.scenarios) gridSet.add(scenario.atMonths);
+  for (const item of items) {
+    if (item.months <= horizon) gridSet.add(item.months);
+  }
   const gridMonths = [...gridSet].sort((a, b) => a - b);
 
   const series: ItemSeries[] = items.map((item) => {
@@ -41,12 +53,11 @@ export function compareAll(state: ComparisonState): CompareResult {
       return { m, netCost: s.netCost, ended: s.ended };
     });
 
-    // 자기 계약기간 내 후보 (+ 그리드에 없는 정확한 만기점)
-    const candidates = gridMonths.filter((m) => m >= GRID_STEP && m <= item.months);
-    if (!candidates.includes(item.months)) {
-      candidates.push(item.months);
-      snaps.set(item.months, costAt(item, common, item.months));
-    }
+    // 소유형은 공통 보유기간까지, 렌트·운용리스는 계약 만기까지만 탐색한다.
+    const candidateEnd = isOwnershipMethod(item.method)
+      ? Math.max(requestedHorizon, item.months)
+      : Math.min(horizon, item.months);
+    const candidates = gridMonths.filter((m) => m >= GRID_STEP && m <= candidateEnd);
     let best = { m: 0, netCost: Infinity, exitLabel: '' };
     for (const m of candidates) {
       const s = snaps.get(m)!;

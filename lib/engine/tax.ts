@@ -7,6 +7,7 @@ import {
   isExempt, marginalRate, VAT_FRACTION,
 } from './taxData';
 import type { CommonProfile, FinanceItem } from './types';
+import { isOwnershipMethod } from './types';
 
 export interface DeductibleBreakdown {
   annualCost: number;      // 1대당 연비용
@@ -73,7 +74,9 @@ function financeCostsBetween(
   start: number,
   end: number,
 ): { annualCost: number; depEquiv: number; fraction: number } {
-  const months = end - start;
+  const segmentStart = Math.max(start, 0);
+  const segmentEnd = Math.max(end, segmentStart);
+  const months = segmentEnd - segmentStart;
   if (months <= 0) return { annualCost: 0, depEquiv: 0, fraction: 0 };
   const fraction = months / 12;
   const f = financials(item);
@@ -83,10 +86,16 @@ function financeCostsBetween(
   // 매입자산 취득가액에는 취득세가 포함된다. 기타 초기비용은 성격이
   // 불명확하므로 사용자가 입력한 전액을 임의로 자본화하지 않는다.
   const depreciationBasis = vehicleBasis + f.acqTaxEach;
-  const depMonths = Math.max(Math.min(end, DEP_YEARS * 12) - start, 0);
+  const depStart = Math.min(segmentStart, DEP_YEARS * 12);
+  const depEnd = Math.min(segmentEnd, DEP_YEARS * 12);
+  const depMonths = Math.max(depEnd - depStart, 0);
   const depSegment = depreciationBasis * (depMonths / (DEP_YEARS * 12));
-  const repaid = remainingDebtEach(item, start) - remainingDebtEach(item, end);
-  const interestSegment = Math.max(f.monthly * months - repaid, 0);
+  const financeStart = Math.min(segmentStart, item.months);
+  const financeEnd = Math.min(segmentEnd, item.months);
+  const financeMonths = Math.max(financeEnd - financeStart, 0);
+  const repaid =
+    remainingDebtEach(item, financeStart) - remainingDebtEach(item, financeEnd);
+  const interestSegment = Math.max(f.monthly * financeMonths - repaid, 0);
   const ancillaryAnnual = item.insuranceYr + item.maintenanceYr;
   return {
     annualCost: (depSegment + interestSegment + ancillaryAnnual * fraction) / fraction,
@@ -108,7 +117,7 @@ export function deductibleAt(item: FinanceItem, common: CommonProfile, m: number
     annualCost = deductibleMonthly * 12 + ancillary;
     depEquiv = deductibleMonthly * 12 * (DEP_EQUIV_RATE[item.method] ?? 1);
   } else {
-    const mc = Math.min(Math.max(m, 0), item.months);
+    const mc = Math.max(m, 0);
     const start = mc > 0 ? Math.floor((mc - 1) / 12) * 12 : 0;
     ({ annualCost, depEquiv } = financeCostsBetween(item, common, start, mc));
   }
@@ -154,7 +163,10 @@ function cumulativeFinanceDeductible(
 
 /** 항목 전체 세금절감 (시점 m) */
 export function taxSavingAt(item: FinanceItem, common: CommonProfile, m: number): number {
-  const mc = Math.min(Math.max(m, 0), item.months); // 만기 이후 절감 동결
+  const requested = Math.max(m, 0);
+  const mc = isOwnershipMethod(item.method)
+    ? requested
+    : Math.min(requested, item.months);
   const mr = marginalRate(common);
   if (mr === 0 || mc <= 0) return 0;
   const deductible = item.method === 'rent' || item.method === 'oplease'

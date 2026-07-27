@@ -2,6 +2,7 @@
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
+import { isOwnershipMethod } from '@/lib/engine/types';
 import { itemTitle } from '@/lib/state/defaults';
 import { normalize, type Norm } from './ResultTabs';
 
@@ -42,11 +43,19 @@ export function ScenarioTab(props: { state: ComparisonState; result: CompareResu
                   <td>{row.scenario.label} ({row.scenario.atMonths}개월)</td>
                   {displayed.map(({ cell, item, value }) => {
                     if (!item) return <td key={cell.itemId}>—</td>; // state/result 일시 불일치 방어
+                    const postFinance =
+                      isOwnershipMethod(item.method) &&
+                      cell.snapshot.m > item.months;
                     return (
                       <td key={cell.itemId} className={bestItemId === cell.itemId ? 'best' : ''}>
                         {fmtMan(value)}원
                         <div className="muted">
-                          {cell.snapshot.bestExit.label}{cell.snapshot.ended ? ` · 만기 종료 (${cell.snapshot.m}개월 기준)` : ''}
+                          {cell.snapshot.bestExit.label}
+                          {cell.snapshot.ended
+                            ? ` · 계약 종료 (${cell.snapshot.m}개월 기준)`
+                            : postFinance
+                              ? ` · 금융 종료 후 보유 (${cell.snapshot.m}개월 기준)`
+                              : ''}
                         </div>
                       </td>
                     );

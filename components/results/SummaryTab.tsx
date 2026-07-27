@@ -48,7 +48,8 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
         </div>
       ) : (
         <div className="card">
-          {targetMonths}개월까지 유지 가능한 항목이 없습니다. 목표 보유기간을 줄이거나 계약기간을 늘려주세요.
+          {targetMonths}개월까지 이어지는 소유형 항목 또는 렌트·운용리스 계약이 없습니다.
+          목표 보유기간을 줄이거나 계약기간을 늘려주세요.
         </div>
       )}
       <div className="card">
@@ -72,7 +73,8 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
           </div>
         ))}
         <p className="muted">
-          계약이 목표 보유기간보다 먼저 끝나는 항목은 최적 선정에서 제외합니다.
+          장기렌트·운용리스가 목표 보유기간 전에 끝나면 최적 선정에서 제외합니다.
+          금융리스·할부는 금융기간 후 월납을 멈추고 보유비용·세금·시세를 계속 반영합니다.
           음수는 매각차익이 비용을 초과한다는 뜻입니다.
         </p>
       </div>
@@ -94,7 +96,7 @@ export function SummaryTab(props: { state: ComparisonState; result: CompareResul
           </table>
         </div>
         <p className="muted" style={{ marginTop: 6 }}>
-          {atTarget.map((x) => `${METHOD_LABELS[x.item.method]} 월납 ${fmtMan(x.s.monthly)}원`).join(' · ')}
+          {atTarget.map((x) => `${METHOD_LABELS[x.item.method]} 계약·금융 월납 ${fmtMan(x.s.monthly)}원`).join(' · ')}
         </p>
       </div>
     </>

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ownershipMaturityNetOutflowEach } from '../costAt';
 import { costAt } from '../snapshot';
 import { baseCommon, baseItem } from './fixtures';
 
@@ -54,6 +55,37 @@ describe('costAt 스냅샷 (스펙 §4.6)', () => {
     expect(at48.ended).toBe(false);
     expect(at60.netCost).toBe(at48.netCost);
     expect(at60.m).toBe(48);
+  });
+
+  it('소유형은 36개월 금융 종료 후에도 60개월 보유시점으로 계산', () => {
+    for (const method of ['finlease', 'installment'] as const) {
+      const item = baseItem(method, {
+        months: 36,
+        insuranceYr: 1_200_000,
+        maintenanceYr: 600_000,
+      });
+      const at36 = costAt(item, baseCommon(), 36);
+      const at60 = costAt(item, baseCommon(), 60);
+      expect(at60.ended).toBe(false);
+      expect(at60.m).toBe(60);
+      expect(at60.sunk - at36.sunk)
+        .toBeCloseTo((1_200_000 + 600_000) * 2, 4);
+      expect(at60.resaleEach).toBeLessThan(at36.resaleEach);
+    }
+  });
+
+  it('금융리스 만기 순현금유출은 만기 후 보유기간의 기회비용에 반영', () => {
+    const item = baseItem('finlease', {
+      months: 36,
+      deposit: { mode: 'amount', value: 5_000_000 },
+      exit: { ...baseItem('finlease').exit, buyoutFee: 300_000 },
+    });
+    const common = baseCommon({ assetReturnPct: 5 });
+    const at60 = costAt(item, common, 60);
+    const expected =
+      at60.initialCash * 0.05 * 5 +
+      ownershipMaturityNetOutflowEach(item) * 0.05 * 2;
+    expect(at60.oppCost).toBeCloseTo(expected, 4);
   });
 
   it('T5 리뷰 후속 — 화물 2대+사업자: VAT 경로 포함 전체가 1대×2와 일치 (tradeIn=0)', () => {

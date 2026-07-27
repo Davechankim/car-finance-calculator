@@ -141,4 +141,16 @@ describe('sunkAt — 누적지출 (스펙 §4.3)', () => {
     const truck = baseItem('rent', { vehicle: { ...baseItem('rent').vehicle, category: 'truck' } });
     expect(sunkAt(truck, c, 60)).toBe(sunkAt(truck, c, 48));
   });
+  it('소유형은 금융 만기 후 월납을 멈추고 보험·정비만 실제 보유기간까지 누적', () => {
+    for (const method of ['finlease', 'installment'] as const) {
+      const item = baseItem(method, {
+        months: 36,
+        insuranceYr: 1_200_000,
+        maintenanceYr: 600_000,
+      });
+      const at36 = sunkAt(item, baseCommon(), 36);
+      const at60 = sunkAt(item, baseCommon(), 60);
+      expect(at60 - at36).toBeCloseTo((1_200_000 + 600_000) * 2, 4);
+    }
+  });
 });

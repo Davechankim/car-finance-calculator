@@ -6,7 +6,7 @@ import {
 import { resaleAt } from './resale';
 import { COMPACT_ACQ_TAX_RELIEF, isExempt, VAT_FRACTION } from './taxData';
 import type { CommonProfile, ExitOption, FinanceItem } from './types';
-import { resolveAmount } from './types';
+import { isOwnershipMethod, resolveAmount } from './types';
 
 export interface Financials {
   P: number;            // 1대 차량가
@@ -92,6 +92,33 @@ export function remainingDebtEach(item: FinanceItem, mRaw: number): number {
   return Math.max(paymentBalance, balloonFloor);
 }
 
+/**
+ * 소유형 금융 만기의 1대당 순현금유출.
+ * 금융리스는 잔존채무·소유권 이전비용을 지급하고 보증금을 돌려받는다.
+ * 할부는 실제 월납액이 부족해 만기에 남은 채무가 있을 때 이를 정산한다.
+ */
+export function ownershipMaturityNetOutflowEach(item: FinanceItem): number {
+  if (item.method === 'finlease') {
+    const f = financials(item);
+    return remainingDebtEach(item, item.months) + item.exit.buyoutFee - f.depositEach;
+  }
+  if (item.method === 'installment') {
+    return remainingDebtEach(item, item.months);
+  }
+  return 0;
+}
+
+/**
+ * 계산 시점. 렌트·운용리스는 계약 만기에 고정하고, 소유형은 금융 만기 뒤의
+ * 실제 보유 시점까지 유지비·시세·세금을 계속 계산한다.
+ */
+export function effectiveMonthAt(item: FinanceItem, mRaw: number): number {
+  const requested = Math.max(mRaw, 0);
+  return isOwnershipMethod(item.method)
+    ? requested
+    : Math.min(requested, item.months);
+}
+
 /** 1대당 누적 부가세 환급 (스펙 §4.2 각주2). 사업자(일반과세)+한도제외 차량만. */
 export function vatRefundCumEach(item: FinanceItem, common: CommonProfile, m: number): number {
   if (!isVatRefundEligible(item, common)) return 0;
@@ -105,31 +132,44 @@ export function vatRefundCumEach(item: FinanceItem, common: CommonProfile, m: nu
   return 0; // oplease: 리스료 면세
 }
 
-/** 항목 전체 누적지출 (스펙 §4.3). m은 내부에서 [0, months]로 클램프 — 만기 초과 납입·VAT 비대칭 방지. */
-export function sunkAt(item: FinanceItem, common: CommonProfile, m: number): number {
+/**
+ * 항목 전체 누적지출 (스펙 §4.3).
+ * 계약·금융 납입은 months에서 멈춘다. 소유형의 보험·정비는 실제 보유 시점까지
+ * 계속되고, 렌트·운용리스는 계약 만기에 고정된다.
+ */
+export function sunkAt(item: FinanceItem, common: CommonProfile, mRaw: number): number {
   const f = financials(item);
   const count = item.vehicle.count;
-  const mc = Math.min(Math.max(m, 0), item.months);
+  const mc = effectiveMonthAt(item, mRaw);
+  const paymentMonths = Math.min(mc, item.months);
   const yrs = mc / 12;
+  const maturityNetOutflow =
+    isOwnershipMethod(item.method) && mc >= item.months
+      ? ownershipMaturityNetOutflowEach(item) * count
+      : 0;
   return (
     (f.downEach + f.depositEach + f.cashExtraEach + f.acqTaxEach + item.upfrontFee) * count +
-    f.monthly * mc * count +
+    f.monthly * paymentMonths * count +
     (item.insuranceYr + item.maintenanceYr) * yrs * count -
     common.tradeIn -
-    vatRefundCumEach(item, common, mc) * count
+    vatRefundCumEach(item, common, paymentMonths) * count +
+    maturityNetOutflow
   );
 }
 
 export interface ExitResult { options: ExitOption[]; best: ExitOption; resaleEach: number }
 
-/** 시점 m의 출구 옵션들 (스펙 §4.4). m은 내부에서 [0, months]로 클램프 — 모든 파생 값이 동일 시계(horizon)를 공유. */
+/**
+ * 시점 m의 출구 옵션들 (스펙 §4.4).
+ * 렌트·운용리스는 만기에 고정되고 소유형은 만기 뒤 실제 시세로 매각한다.
+ */
 export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: number): ExitResult {
-  const m = Math.min(Math.max(mRaw, 0), item.months);
+  const m = effectiveMonthAt(item, mRaw);
   const f = financials(item);
   const count = item.vehicle.count;
   const sunk = sunkAt(item, common, m);
-  const remM = item.months - m;
-  const atEnd = remM === 0;
+  const remM = Math.max(item.months - m, 0);
+  const atOrAfterEnd = m >= item.months;
   const resaleEach = resaleAt(item, m);
   const vatEligible = isVatRefundEligible(item, common);
   const taxableResaleTotal =
@@ -144,11 +184,11 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
 
   if (item.method === 'rent') {
     options.push(
-      atEnd
+      atOrAfterEnd
         ? { kind: 'return', label: '만기 반납', cost: returnCost }
         : { kind: 'terminate', label: '중도해지 반납', cost: returnCost },
     );
-    if (ex.canTransfer && !atEnd)
+    if (ex.canTransfer && !atOrAfterEnd)
       options.push({
         kind: 'transfer',
         label: '계약 승계',
@@ -158,11 +198,11 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
 
   if (item.method === 'oplease') {
     options.push(
-      atEnd
+      atOrAfterEnd
         ? { kind: 'return', label: '만기 반납', cost: returnCost }
         : { kind: 'terminate', label: '중도해지 반납', cost: returnCost },
     );
-    if (ex.canTransfer && !atEnd)
+    if (ex.canTransfer && !atOrAfterEnd)
       options.push({
         kind: 'transfer',
         label: '계약 승계',
@@ -176,7 +216,7 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
     const buyoutTaxEach = calculateAcquisitionTax(item, buyoutEach);
     options.push({
       kind: 'buyoutSell',
-      label: atEnd ? '잔존가 인수 후 매각' : '조기 인수 후 매각',
+      label: atOrAfterEnd ? '잔존가 인수 후 매각' : '조기 인수 후 매각',
       cost:
         sunk +
         (buyoutCashEach + buyoutTaxEach + ex.buyoutFee) * count -
@@ -186,17 +226,24 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
   }
 
   if (item.method === 'finlease') {
-    const debtEach = remainingDebtEach(item, m);
+    const settlementNet =
+      atOrAfterEnd
+        ? 0
+        : (
+            Math.max(remainingDebtEach(item, m) - ex.earlyDiscount, 0) +
+            ex.buyoutFee
+          ) * count - depositReturn;
     options.push({
       kind: 'settleSell',
-      label: atEnd ? '잔존가 지급·소유 (시세 반영)' : '조기정산 후 매각',
-      cost:
-        sunk +
-        (Math.max(debtEach - ex.earlyDiscount, 0) + ex.buyoutFee) * count -
-        taxableResaleTotal -
-        depositReturn,
+      label:
+        m > item.months
+          ? '보유차량 매각 (만기정산 반영)'
+          : atOrAfterEnd
+            ? '만기정산 후 매각'
+            : '조기정산 후 매각',
+      cost: sunk + settlementNet - taxableResaleTotal,
     });
-    if (ex.canTransfer && !atEnd)
+    if (ex.canTransfer && !atOrAfterEnd)
       options.push({
         kind: 'transfer',
         label: '리스 승계',
@@ -205,14 +252,19 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
   }
 
   if (item.method === 'installment') {
-    const balEach = remainingDebtEach(item, m);
+    const settlement =
+      atOrAfterEnd
+        ? 0
+        : Math.max(remainingDebtEach(item, m) - ex.earlyDiscount, 0) * count;
     options.push({
       kind: 'settleSell',
-      label: atEnd ? '보유 (시세 반영)' : '중도상환 후 매각',
-      cost:
-        sunk +
-        Math.max(balEach - ex.earlyDiscount, 0) * count -
-        taxableResaleTotal,
+      label:
+        m > item.months
+          ? '보유차량 매각'
+          : atOrAfterEnd
+            ? '금융 종료 후 매각'
+            : '중도상환 후 매각',
+      cost: sunk + settlement - taxableResaleTotal,
     });
   }
 
