@@ -1,5 +1,8 @@
 // lib/state/defaults.ts — 신규 항목 기본값 (스펙 §6.3)
-import { categoryMeta } from '@/lib/engine/taxData';
+import {
+  TAX_RULE_EFFECTIVE_FROM,
+  categoryMeta,
+} from '@/lib/engine/taxData';
 import type { ComparisonState, FinanceItem, Method } from '@/lib/engine/types';
 
 export const METHOD_LABELS: Record<Method, string> = {
@@ -26,7 +29,14 @@ export function newItem(method: Method): FinanceItem {
   return {
     id: nextId(),
     method,
-    vehicle: { name: '', price: 40_000_000, isUsed: false, count: 1, category: 'passenger' },
+    vehicle: {
+      name: '',
+      price: 40_000_000,
+      priceIncludesVat: true,
+      isUsed: false,
+      count: 1,
+      category: 'passenger',
+    },
     months: 48,
     ratePct: d.ratePct,
     down: { mode: 'pct', value: 30 },
@@ -36,15 +46,30 @@ export function newItem(method: Method): FinanceItem {
         ? null
         : { mode: 'pct', value: d.residualPct },
     loanAmount: method === 'installment' ? 28_000_000 : null,
-    monthlyOverride: null,
+    monthlyQuote: {
+      financePayment: null,
+      insurance: 0,
+      vehicleTax: 0,
+      maintenance: 0,
+      maintenanceBreakdownKnown: false,
+      serviceFee: 0,
+    },
     upfrontFee: 0,
     insuranceYr: d.insuranceYr,
+    vehicleTaxYr: 0,
     maintenanceYr: d.maintenanceYr,
+    postFinanceAnnualCosts: {
+      insurance: 0,
+      vehicleTax: 0,
+      maintenance: 0,
+    },
     subsidy: 0,
     acqTaxRatePct: categoryMeta('passenger').acqTaxDefaultPct,
     tax: {
       useDrivingLog: false,
       bizUsePct: 100,
+      hasQualifiedEvidence: false,
+      isTaxableBusinessAsset: true,
       hasDedicatedInsurance: true,
       corporatePlateRequired: false,
       hasCorporatePlate: true,
@@ -60,7 +85,9 @@ export function newItem(method: Method): FinanceItem {
 export function defaultState(): ComparisonState {
   return {
     common: {
-      biz: 'personal', industryIndex: 0, revenueIndex: 2,
+      biz: 'personal', vatTaxType: 'general', taxRuleHorizon: 'approvedOnly',
+      taxStartDate: TAX_RULE_EFFECTIVE_FROM,
+      industryIndex: 0, revenueIndex: 2,
       marginalRateOverride: null, assetReturnPct: 5, tradeIn: 0,
       targetMonths: 48, smallRealEstateCorp: false, personalInsuranceRequired: false,
       scenarios: [

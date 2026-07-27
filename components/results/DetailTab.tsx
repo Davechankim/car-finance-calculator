@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Chips, NumInput } from '@/components/ui/Field';
 import { costAt } from '@/lib/engine/snapshot';
 import {
-  financials, ownershipMaturityNetOutflowEach, vatRefundCumEach,
+  cumulativeFinancePaymentsEach, financials, ownershipMaturityNetOutflowEach,
+  postFinanceYearsAt, vatRefundCumEach,
 } from '@/lib/engine/costAt';
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
@@ -27,10 +28,16 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
     : item.months;
   const effM = Math.min(m, analysisLimit);
   const s = costAt(item, state.common, effM);
-  const f = financials(item);
+  const f = financials(item, state.common);
   const count = item.vehicle.count;
   const paymentMonths = Math.min(s.m, item.months);
   const vatCum = vatRefundCumEach(item, state.common, s.m) * count;
+  const cumulativeFinancePaid =
+    cumulativeFinancePaymentsEach(item, paymentMonths) * count;
+  const financePaymentWasCapped =
+    cumulativeFinancePaid + 0.5 <
+    f.financeMonthly * paymentMonths * count;
+  const postFinanceYears = postFinanceYearsAt(item, s.m);
 
   const parts: { label: string; value: number }[] = [
     { label: '선납금', value: f.downEach * count },
@@ -38,8 +45,34 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
     { label: '현금 추가 (할부)', value: f.cashExtraEach * count },
     { label: '취득세', value: f.acqTaxEach * count },
     { label: '기타 초기비용', value: item.upfrontFee * count },
-    { label: `누적 금융납입 (${paymentMonths}개월)`, value: f.monthly * paymentMonths * count },
-    { label: '보험·정비 누적', value: (item.insuranceYr + item.maintenanceYr) * (s.m / 12) * count },
+    {
+      label:
+        `누적 금융·차량대금 (${paymentMonths}개월` +
+        `${financePaymentWasCapped ? ' · 조기완납 상한' : ''})`,
+      value: cumulativeFinancePaid,
+    },
+    {
+      label: `월납 포함 부대비용 (${paymentMonths}개월)`,
+      value: f.monthlyAncillary * paymentMonths * count,
+    },
+    {
+      label: '월납 외 보유기간 전체 보험·자동차세·정비 누적',
+      value:
+        (item.insuranceYr + item.vehicleTaxYr + item.maintenanceYr) *
+        (s.m / 12) *
+        count,
+    },
+    {
+      label: '금융 종료 후 추가 보험·자동차세·정비 누적',
+      value:
+        (
+          item.postFinanceAnnualCosts.insurance +
+          item.postFinanceAnnualCosts.vehicleTax +
+          item.postFinanceAnnualCosts.maintenance
+        ) *
+        postFinanceYears *
+        count,
+    },
     {
       label: '금융 만기 정산·보증금 반환',
       value:
@@ -86,7 +119,8 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
         실질순비용 = {fmtMan(s.netCost)}원 {s.ended ? '(계약 만기 고정)' : ''}
       </div>
       <p className="muted">
-        월납 {fmtMan(s.monthly)}원/대{item.monthlyOverride != null ? ' (실제 견적)' : ''} ·
+        총 월납 {fmtMan(s.monthly)}원/대 · 금융·차량대금 {fmtMan(s.financeMonthly)}원/대 ·
+        월 부대비용 {fmtMan(s.monthlyAncillary)}원/대 ·
         최초 금융잔액 {fmtMan(s.principal)}원/대 · 시세 {fmtMan(s.resaleEach)}원/대 ·
         연 인정액 {fmtMan(s.annualDeductible)}원/대
       </p>

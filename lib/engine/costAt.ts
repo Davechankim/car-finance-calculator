@@ -4,7 +4,20 @@ import {
   growthFactor, monthlyRate, pmt, pmtWithBalloon, remBalForPayment,
 } from './pmt';
 import { resaleAt } from './resale';
-import { COMPACT_ACQ_TAX_RELIEF, isExempt, VAT_FRACTION } from './taxData';
+import {
+  COMPACT_ACQ_TAX_RELIEF,
+  RESALE_OUTPUT_VAT_APPLIES_TO_GENERAL_TAXABLE_BUSINESS_ASSET,
+  RESALE_OUTPUT_VAT_USES_GENERAL_RATE_WHEN_MIXED_OR_UNCERTAIN,
+  SIMPLIFIED_RESALE_OUTPUT_VAT_VALUE_ADDED_RATES,
+  VAT_FRACTION,
+  VAT_INPUT_REQUIRES_GENERAL_TAXPAYER,
+  VAT_INPUT_REQUIRES_QUALIFIED_EVIDENCE,
+  VAT_STATUTORY_RATE,
+  isCompactAcquisitionTaxReliefApplicable,
+  isTaxRuleApplicableAtMonth,
+  isVatInputCreditEligible,
+  taxRuleApplicableMonths,
+} from './taxData';
 import type { CommonProfile, ExitOption, FinanceItem } from './types';
 import { isOwnershipMethod, resolveAmount } from './types';
 
@@ -17,24 +30,102 @@ export interface Financials {
   cashExtraEach: number;// 1대당 현금추가 (할부)
   acqTaxEach: number;   // 1대당 취득세 (finlease/installment)
   calculatedMonthly: number; // 금리·기간으로 계산한 1대당 월납
-  monthly: number;      // 1대당 월납
+  financeMonthly: number; // 1대당 금융 원리금·차량대금 월납
+  monthlyAncillary: number; // 1대당 월 보험·자동차세·정비·서비스비
+  monthlyVatTaxable: number; // 렌트 월납 중 VAT 과세 대상으로 입력된 금액
+  monthly: number;      // 1대당 총 월 현금납입
   r: number;            // 월이율
 }
 
 export function isVatRefundEligible(item: FinanceItem, common: CommonProfile): boolean {
-  return common.biz !== 'none' && isExempt(item.vehicle.category);
+  return (
+    common.biz !== 'none' &&
+    (!VAT_INPUT_REQUIRES_GENERAL_TAXPAYER || common.vatTaxType === 'general') &&
+    (!VAT_INPUT_REQUIRES_QUALIFIED_EVIDENCE || item.tax.hasQualifiedEvidence) &&
+    isVatInputCreditEligible(item.vehicle.category)
+  );
 }
 
-function calculateAcquisitionTax(item: FinanceItem, grossBasis: number): number {
-  const tax = Math.round(
-    grossBasis * (1 - VAT_FRACTION) * (item.acqTaxRatePct / 100),
+export function isVehiclePurchaseVatRefundEligible(
+  item: FinanceItem,
+  common: CommonProfile,
+): boolean {
+  return item.vehicle.priceIncludesVat && isVatRefundEligible(item, common);
+}
+
+/**
+ * 사업용 차량 매각의 매출 VAT는 취득 당시 매입세액 공제 여부와 별개다.
+ * 일반과세는 10/110, 간이과세는 선택 업종의 법정 부가가치율×10%,
+ * 겸영·불확실은 과소계상 방지를 위해 10/110을 보수적으로 적용한다.
+ * 승인기간 뒤에도 납부세액을 0원으로 떨어뜨리지 않고 같은 비율을 보수 유지한다.
+ * 개인자산·면세사업 전용·포괄적 사업양도 등 예외는 사용자가 끌 수 있다.
+ */
+export function isResaleOutputVatApplicable(
+  item: FinanceItem,
+  common: CommonProfile,
+  _transactionMonth = 0,
+): boolean {
+  const regimeSupported =
+    common.vatTaxType === 'general'
+      ? RESALE_OUTPUT_VAT_APPLIES_TO_GENERAL_TAXABLE_BUSINESS_ASSET
+      : common.vatTaxType === 'simplified'
+        ? true
+        : common.vatTaxType === 'mixedOrUncertain'
+          ? RESALE_OUTPUT_VAT_USES_GENERAL_RATE_WHEN_MIXED_OR_UNCERTAIN
+          : false;
+  return (
+    regimeSupported &&
+    common.biz !== 'none' &&
+    item.tax.isTaxableBusinessAsset
   );
-  return item.vehicle.category === 'compact'
+}
+
+/** VAT 포함 예상 매각대금에서 납부 VAT로 차감할 비율. */
+export function resaleOutputVatFraction(
+  item: FinanceItem,
+  common: CommonProfile,
+  transactionMonth = 0,
+): number {
+  if (!isResaleOutputVatApplicable(item, common, transactionMonth)) return 0;
+  if (common.vatTaxType === 'simplified') {
+    const valueAddedRate =
+      SIMPLIFIED_RESALE_OUTPUT_VAT_VALUE_ADDED_RATES[common.industryIndex]
+      ?? Math.max(...SIMPLIFIED_RESALE_OUTPUT_VAT_VALUE_ADDED_RATES);
+    return valueAddedRate * VAT_STATUTORY_RATE;
+  }
+  if (
+    common.vatTaxType === 'general'
+    || (
+      common.vatTaxType === 'mixedOrUncertain'
+      && RESALE_OUTPUT_VAT_USES_GENERAL_RATE_WHEN_MIXED_OR_UNCERTAIN
+    )
+  ) {
+    return VAT_FRACTION;
+  }
+  return 0;
+}
+
+function calculateAcquisitionTax(
+  item: FinanceItem,
+  grossBasis: number,
+  basisIncludesVat = true,
+  compactReliefApplies = true,
+): number {
+  const supplyBasis = basisIncludesVat
+    ? grossBasis * (1 - VAT_FRACTION)
+    : grossBasis;
+  const tax = Math.round(
+    supplyBasis * (item.acqTaxRatePct / 100),
+  );
+  return item.vehicle.category === 'compact' && compactReliefApplies
     ? Math.max(tax - COMPACT_ACQ_TAX_RELIEF, 0)
     : tax;
 }
 
-export function financials(item: FinanceItem): Financials {
+export function financials(
+  item: FinanceItem,
+  common?: CommonProfile,
+): Financials {
   const P = item.vehicle.price;
   const downEach = resolveAmount(item.down, P);
   const depositEach = resolveAmount(item.deposit, P);
@@ -61,35 +152,85 @@ export function financials(item: FinanceItem): Financials {
       : principal * growthFactor(r, Math.max(item.months, 0));
   const resEach = Math.min(requestedResidual, maxResidual);
 
-  // 입력 가격은 부가세 포함가다. 지방세법 시행령상 부가가치세는
-  // 사실상취득가격에서 제외되므로 환급 가능 여부와 무관하게 공급가액을 쓴다.
+  // VAT 포함 거래는 지방세법상 사실상취득가격에서 VAT를 제외하고,
+  // 개인 간 중고거래처럼 VAT가 없는 입력 가격은 전액을 과표로 쓴다.
   const acqTaxEach =
     item.method === 'finlease' || item.method === 'installment'
-      ? calculateAcquisitionTax(item, P)
+      ? calculateAcquisitionTax(
+          item,
+          P,
+          item.vehicle.priceIncludesVat,
+          common
+            ? isCompactAcquisitionTaxReliefApplicable(common, 0)
+            : true,
+        )
       : 0;
   const calculatedMonthly = item.method === 'installment'
     ? pmt(principal, r, item.months)
     : pmtWithBalloon(principal, r, item.months, resEach);
-  const monthly =
-    item.monthlyOverride != null && item.monthlyOverride >= 0
-      ? item.monthlyOverride
+  const financeMonthly =
+    item.monthlyQuote.financePayment != null && item.monthlyQuote.financePayment >= 0
+      ? item.monthlyQuote.financePayment
       : calculatedMonthly;
+  const monthlyAncillary =
+    item.monthlyQuote.insurance +
+    item.monthlyQuote.vehicleTax +
+    item.monthlyQuote.maintenance +
+    item.monthlyQuote.serviceFee;
+  const monthlyVatTaxable =
+    financeMonthly +
+    item.monthlyQuote.maintenance +
+    item.monthlyQuote.serviceFee;
+  const monthly = financeMonthly + monthlyAncillary;
 
   return {
     P, downEach, depositEach, resEach, principal, cashExtraEach, acqTaxEach,
-    calculatedMonthly, monthly, r,
+    calculatedMonthly, financeMonthly, monthlyAncillary, monthlyVatTaxable, monthly, r,
   };
 }
 
-/** 실제 월 납입액을 반영한 1대당 금융잔액. 리스는 계약 잔존가의 현재가치보다 낮아지지 않는다. */
+/** 실제 금융 원리금 월납을 반영한 1대당 금융잔액. 리스는 계약 잔존가의 현재가치보다 낮아지지 않는다. */
 export function remainingDebtEach(item: FinanceItem, mRaw: number): number {
   const m = Math.min(Math.max(mRaw, 0), item.months);
   const f = financials(item);
-  const paymentBalance = remBalForPayment(f.principal, f.r, f.monthly, m);
+  const paymentBalance = remBalForPayment(f.principal, f.r, f.financeMonthly, m);
   if (item.method !== 'oplease' && item.method !== 'finlease') return paymentBalance;
   const monthsLeft = item.months - m;
   const balloonFloor = f.resEach / growthFactor(f.r, monthsLeft);
   return Math.max(paymentBalance, balloonFloor);
+}
+
+/**
+ * 실제 누적 금융납입액(1대당).
+ * 할부는 각 회차의 발생 이자를 포함한 잔액까지만 납입하므로 큰 실납입액을
+ * 입력해도 조기 완납 뒤 가상의 납입·이자가 계속 쌓이지 않는다.
+ * 리스·렌트는 잔존가 계약을 포함한 약정 월납 규약을 그대로 유지한다.
+ */
+export function cumulativeFinancePaymentsEach(
+  item: FinanceItem,
+  mRaw: number,
+): number {
+  const paidMonths = Math.min(Math.max(mRaw, 0), item.months);
+  const f = financials(item);
+  if (item.method !== 'installment') return f.financeMonthly * paidMonths;
+  if (paidMonths <= 0 || f.principal <= 0 || f.financeMonthly <= 0) return 0;
+
+  const wholeMonths = Math.floor(paidMonths);
+  let balance = f.principal;
+  let total = 0;
+  for (let month = 0; month < wholeMonths && balance > 0; month += 1) {
+    const due = balance * (1 + f.r);
+    const paid = Math.min(f.financeMonthly, due);
+    total += paid;
+    balance = Math.max(due - paid, 0);
+  }
+
+  const partialMonth = paidMonths - wholeMonths;
+  if (partialMonth > 0 && balance > 0) {
+    const due = balance * growthFactor(f.r, partialMonth);
+    total += Math.min(f.financeMonthly * partialMonth, due);
+  }
+  return total;
 }
 
 /**
@@ -119,17 +260,52 @@ export function effectiveMonthAt(item: FinanceItem, mRaw: number): number {
     : Math.min(requested, item.months);
 }
 
-/** 1대당 누적 부가세 환급 (스펙 §4.2 각주2). 사업자(일반과세)+한도제외 차량만. */
-export function vatRefundCumEach(item: FinanceItem, common: CommonProfile, m: number): number {
+/** 소유형 금융 종료 뒤 추가 연간비용이 적용되는 누적 연수. */
+export function postFinanceYearsAt(item: FinanceItem, mRaw: number): number {
+  if (!isOwnershipMethod(item.method)) return 0;
+  return Math.max(effectiveMonthAt(item, mRaw) - item.months, 0) / 12;
+}
+
+/**
+ * 1대당 누적 부가세 환급.
+ * 일반과세자·VAT 적격 차종·적격증빙을 모두 충족한 경우에만 차량 매입,
+ * 렌트 과세분과 별도 정비비의 매입세액을 반영한다.
+ */
+export function vatRefundCumEach(
+  item: FinanceItem,
+  common: CommonProfile,
+  mRaw: number,
+): number {
   if (!isVatRefundEligible(item, common)) return 0;
+  const m = effectiveMonthAt(item, mRaw);
+  const applicableMonths = taxRuleApplicableMonths(common, m);
+  const appliesAtStart = isTaxRuleApplicableAtMonth(common, 0);
+  const annualMaintenanceGross =
+    item.maintenanceYr * (applicableMonths / 12) +
+    item.postFinanceAnnualCosts.maintenance *
+      (Math.max(applicableMonths - item.months, 0) / 12);
+  const maintenanceRefund = annualMaintenanceGross * VAT_FRACTION;
   if (item.method === 'rent') {
-    const { monthly } = financials(item);
-    return monthly * Math.min(m, item.months) * VAT_FRACTION;
+    const { downEach, monthlyVatTaxable } = financials(item);
+    return (
+      (
+        (appliesAtStart ? downEach : 0) +
+        monthlyVatTaxable * Math.min(applicableMonths, item.months)
+      ) * VAT_FRACTION +
+      maintenanceRefund
+    );
   }
   if (item.method === 'finlease' || item.method === 'installment') {
-    return item.vehicle.price * VAT_FRACTION; // 초기 1회 (m=0부터 반영)
+    const monthlyMaintenanceRefund =
+      item.monthlyQuote.maintenance *
+      Math.min(applicableMonths, item.months) *
+      VAT_FRACTION;
+    const vehiclePurchaseRefund = appliesAtStart && item.vehicle.priceIncludesVat
+      ? item.vehicle.price * VAT_FRACTION
+      : 0;
+    return vehiclePurchaseRefund + monthlyMaintenanceRefund + maintenanceRefund;
   }
-  return 0; // oplease: 리스료 면세
+  return maintenanceRefund; // 운용리스료 자체는 면세, 별도 정비비만 검토
 }
 
 /**
@@ -138,21 +314,32 @@ export function vatRefundCumEach(item: FinanceItem, common: CommonProfile, m: nu
  * 계속되고, 렌트·운용리스는 계약 만기에 고정된다.
  */
 export function sunkAt(item: FinanceItem, common: CommonProfile, mRaw: number): number {
-  const f = financials(item);
+  const f = financials(item, common);
   const count = item.vehicle.count;
   const mc = effectiveMonthAt(item, mRaw);
   const paymentMonths = Math.min(mc, item.months);
   const yrs = mc / 12;
+  const postFinanceYears = postFinanceYearsAt(item, mc);
+  const regularAnnualCosts =
+    item.insuranceYr + item.vehicleTaxYr + item.maintenanceYr;
+  const postFinanceAnnualCosts =
+    item.postFinanceAnnualCosts.insurance +
+    item.postFinanceAnnualCosts.vehicleTax +
+    item.postFinanceAnnualCosts.maintenance;
   const maturityNetOutflow =
     isOwnershipMethod(item.method) && mc >= item.months
       ? ownershipMaturityNetOutflowEach(item) * count
       : 0;
   return (
     (f.downEach + f.depositEach + f.cashExtraEach + f.acqTaxEach + item.upfrontFee) * count +
-    f.monthly * paymentMonths * count +
-    (item.insuranceYr + item.maintenanceYr) * yrs * count -
+    (
+      cumulativeFinancePaymentsEach(item, paymentMonths) +
+      f.monthlyAncillary * paymentMonths
+    ) * count +
+    regularAnnualCosts * yrs * count +
+    postFinanceAnnualCosts * postFinanceYears * count -
     common.tradeIn -
-    vatRefundCumEach(item, common, paymentMonths) * count +
+    vatRefundCumEach(item, common, mc) * count +
     maturityNetOutflow
   );
 }
@@ -165,15 +352,17 @@ export interface ExitResult { options: ExitOption[]; best: ExitOption; resaleEac
  */
 export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: number): ExitResult {
   const m = effectiveMonthAt(item, mRaw);
-  const f = financials(item);
+  const f = financials(item, common);
   const count = item.vehicle.count;
   const sunk = sunkAt(item, common, m);
   const remM = Math.max(item.months - m, 0);
   const atOrAfterEnd = m >= item.months;
   const resaleEach = resaleAt(item, m);
-  const vatEligible = isVatRefundEligible(item, common);
-  const taxableResaleTotal =
-    (vatEligible ? resaleEach * (1 - VAT_FRACTION) : resaleEach) * count;
+  const inputVatRecoverable =
+    isVatRefundEligible(item, common) &&
+    isTaxRuleApplicableAtMonth(common, m);
+  const resaleVatFraction = resaleOutputVatFraction(item, common, m);
+  const taxableResaleTotal = resaleEach * (1 - resaleVatFraction) * count;
   const ex = item.exit;
   const options: ExitOption[] = [];
   const depositReturn = item.method === 'installment' ? 0 : f.depositEach * count;
@@ -210,10 +399,16 @@ export function exitOptionsAt(item: FinanceItem, common: CommonProfile, mRaw: nu
       });
     const debtEach = remainingDebtEach(item, m);
     const buyoutEach = Math.max(debtEach - ex.earlyDiscount, 0);
-    const buyoutCashEach = vatEligible
+    const buyoutCashEach = inputVatRecoverable
       ? buyoutEach * (1 - VAT_FRACTION)
       : buyoutEach;
-    const buyoutTaxEach = calculateAcquisitionTax(item, buyoutEach);
+    // 세율은 보수 유지하되 명시적인 경차 감면 일몰은 거래일에 맞춰 종료한다.
+    const buyoutTaxEach = calculateAcquisitionTax(
+      item,
+      buyoutEach,
+      true,
+      isCompactAcquisitionTaxReliefApplicable(common, m),
+    );
     options.push({
       kind: 'buyoutSell',
       label: atOrAfterEnd ? '잔존가 인수 후 매각' : '조기 인수 후 매각',

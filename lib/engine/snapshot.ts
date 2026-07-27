@@ -10,7 +10,7 @@ import { isOwnershipMethod } from './types';
 export function costAt(item: FinanceItem, common: CommonProfile, mRaw: number): CostSnapshot {
   const m = effectiveMonthAt(item, mRaw);
   const ended = !isOwnershipMethod(item.method) && mRaw > item.months;
-  const f = financials(item);
+  const f = financials(item, common);
   const count = item.vehicle.count;
   const yrs = m / 12;
 
@@ -40,7 +40,10 @@ export function costAt(item: FinanceItem, common: CommonProfile, mRaw: number): 
 
   return {
     m, ended,
-    monthly: f.monthly, principal: f.principal,
+    monthly: f.monthly,
+    financeMonthly: f.financeMonthly,
+    monthlyAncillary: f.monthlyAncillary,
+    principal: f.principal,
     sunk, resaleEach, resaleTotal: resaleEach * count,
     exitOptions: options, bestExit: best,
     annualDeductible: breakdown.recognizedEach,

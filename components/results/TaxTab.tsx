@@ -1,7 +1,8 @@
 'use client';
 import { deductibleAt, taxSavingAt } from '@/lib/engine/tax';
 import {
-  annualCostLimit, annualDepLimit, isExempt, marginalRate,
+  annualCostLimit, annualDepLimit, isBusinessPassengerLimitExempt,
+  marginalRate, taxRuleApplicableMonths, taxRuleMonthsFrom,
 } from '@/lib/engine/taxData';
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
@@ -15,6 +16,8 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
     return <div className="card">비사업자는 차량 비용처리(세금절감)가 없습니다. 공통 설정에서 사업자 유형을 선택하세요.</div>;
   }
   const mr = marginalRate(state.common);
+  const approvedMonths = taxRuleMonthsFrom(state.common.taxStartDate);
+  const displayMonths = (value: number) => Math.round(value * 10) / 10;
   return (
     <div className="card">
       <h3>비용 인정 계산 과정 (항목별 유효 비교시점의 마지막 과세기간 · 1대당 연환산)</h3>
@@ -28,21 +31,29 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
           </thead>
           <tbody>
             {state.items.map((item, i) => {
-              const taxMonth = isOwnershipMethod(item.method)
+              const requestedTaxMonth = isOwnershipMethod(item.method)
                 ? state.common.targetMonths
                 : Math.min(state.common.targetMonths, item.months);
+              const taxMonth = taxRuleApplicableMonths(
+                state.common,
+                requestedTaxMonth,
+              );
               const b = deductibleAt(item, state.common, taxMonth);
               const saving = taxSavingAt(item, state.common, state.common.targetMonths);
-              const exempt = isExempt(item.vehicle.category);
+              const exempt =
+                isBusinessPassengerLimitExempt(item.vehicle.category);
               return (
                 <tr key={item.id}>
                   <td>
                     {itemTitle(item, i)}{exempt ? ' (한도제외)' : ''}
                     <div className="muted">
-                      {taxMonth}개월 기준
+                      {displayMonths(taxMonth)}개월 기준
                       {!isOwnershipMethod(item.method) &&
                       state.common.targetMonths > item.months
                         ? ' · 계약만기'
+                        : ''}
+                      {taxMonth < requestedTaxMonth
+                        ? ' · 승인 세법기간 상한'
                         : ''}
                     </div>
                   </td>
@@ -68,7 +79,10 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
         (기록부 작성 시 업무비율)·감가 {fmtMan(annualDepLimit(state.common))}원 한도 (대당) ·
         세금절감 열은 목표 보유기간 누적액이며, 렌트·운용리스의 연환산 값은
         목표보다 먼저 끝나면 계약만기의 마지막 과세기간을 표시 ·
-        금융리스·할부는 금융 만기 후 보유비용과 감가를 계속 반영
+        금융리스·할부는 금융 만기 후 보유비용과 감가를 계속 반영 ·
+        {state.common.taxRuleHorizon === 'approvedOnly'
+          ? ` 승인된 2026 규칙 혜택은 입력 시작일부터 남은 ${displayMonths(approvedMonths)}개월까지만 적용`
+          : ' 승인 규칙이 비교기간 내내 동일하다고 가정'}
       </p>
     </div>
   );

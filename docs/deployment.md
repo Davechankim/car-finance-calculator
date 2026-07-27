@@ -15,9 +15,11 @@
 1. `Test, typecheck, and build`
    - 고정 잠금 파일로 의존성 설치
    - Vitest 단위 테스트
+   - 별도 stdio 프로세스로 읽기 전용 세법 MCP 연결·도구 목록·승인 스냅샷 확인
    - TypeScript 검사
    - 프로덕션 빌드
    - Sites 서버 엔트리와 호스팅 설정 일치 여부 확인
+   - AdSense 부분 설정·테스트 식별자·비공개 배포 게이트 확인
 2. `Browser E2E`
    - Chromium 설치
    - 기본 결과, 키보드 탭 이동, 입력·자동 저장, 항목 추가·복제·삭제 검증
@@ -67,3 +69,36 @@
 
 `.openai/hosting.json`에는 Sites 프로젝트 연결 정보와 선택적 D1/R2 논리 바인딩만
 둔다. 토큰, 비밀번호, API 키 같은 런타임 값은 저장소에 커밋하지 않는다.
+
+## 상업 공개 전환
+
+비공개 운영 검증이 끝난 뒤 실제 AdSense 수익화를 시작할 때만 다음을 추가한다.
+
+1. 사용자 소유의 공개 HTTPS 주소와 운영자 연락·정책 문구를 확정한다.
+2. AdSense에서 사이트를 추가하고 발급된 client·광고 슬롯 ID를 준비한다.
+   가짜 값이나 다른 게시자의 값은 사용하지 않는다.
+3. 호스팅/CDN의 실제 접속 기록·보유기간·처리 주체를 확인해 정책에 공개한다.
+4. EEA·영국·스위스 대상 Google 인증 CMP, IAB TCF v2.3, 동의·거부·세부 선택과
+   모든 페이지의 사후 철회 링크를 실제 공개 주소에서 검증한다.
+5. AdSense 운영 계정의 Auto ads를 OFF로 유지한다. 계산 입력·결과 UI와
+   `/privacy`, `/terms`, `/about` 정책·소개 페이지에는 Auto ads를 허용하지
+   않는다. 변경하려면 별도 정책·화면 리뷰와 페이지 제외 증거가 필요하다.
+6. 검증을 마친 경우에만 **빌드 명령을 실행할 같은 환경**에 공개 주소와
+   client·두 슬롯을 넣고 `NEXT_PUBLIC_SITE_PUBLIC=true`,
+   `NEXT_PUBLIC_ADSENSE_CONSENT_READY=true`,
+   `NEXT_PUBLIC_ADSENSE_POLICY_READY=true`,
+   `NEXT_PUBLIC_ADSENSE_ENABLED=true`를 모두 설정한다.
+   `NEXT_PUBLIC_ADSENSE_AUTO_ADS=false`는 유지한다. 이 값들은 브라우저 번들에
+   빌드 시점에 고정되므로 Sites 런타임에만 추가해서는 안 된다.
+7. 위 환경을 유지한 채 `npm run build` 후 `npm run verify:adsense-release`를
+   실행한다. 검증기는 부분 설정·테스트 식별자뿐 아니라 client와 두 슬롯 및
+   모든 활성 플래그가 실제 `dist/client` 번들에 함께 반영됐는지 확인한다.
+   값을 바꾸거나 끄려면 반드시 다시 빌드하고 검증한다.
+8. 같은 빌드에서 생성된 canonical, sitemap, robots와 `ads.txt`를 확인한다.
+9. 공개 배포 전 광고 없는 상태와 광고 활성 상태를 각각 모바일·데스크톱에서
+   검증한 뒤 접근 범위 변경 승인을 받는다.
+10. 로그인 없이 사이트와 `/ads.txt`에 접근되는지 확인하고 AdSense 심사를
+   요청한다. 승인 상태가 `Ready`가 되기 전에는 수익 발생을 전제로 하지 않는다.
+
+세법 MCP의 `LAW_OPEN_API_OC`는 상업 사이트 런타임에 넣지 않는다. MCP는 로컬·CI의
+관리자용 프로세스로만 실행하며, 브라우저 계산기는 커밋된 승인 스냅샷만 사용한다.

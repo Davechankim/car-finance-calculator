@@ -1,0 +1,15 @@
+[mcp_servers.kr_tax_law]
+command = "node"
+args = ["--import", "tsx", "mcp/stdio.ts"]
+env_vars = ["LAW_OPEN_API_OC"]
+enabled_tools = [
+  "get_approved_tax_rule_snapshot",
+  "get_official_law_article",
+  "get_law_article_change_history",
+  "review_law_article_changes",
+]
+default_tools_approval_mode = "writes"
+startup_timeout_sec = 15
+tool_timeout_sec = 20
+enabled = true
+required = false

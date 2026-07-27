@@ -90,22 +90,75 @@ describe('annualInterestAt / deductibleAt — 항목 조립', () => {
     expect(b.annualCost).toBeCloseTo(basis / 5 + yearTwoInterest, 4);
     expect(b.depEquiv).toBeCloseTo(basis / 5, 4);
   });
-  it('렌트 감가상당액 = 연렌트료×70%, 운용리스 = ×93%', () => {
+  it('렌트 감가상당액은 연렌트료×70%, 운용리스는 서비스비 포함 리스료를 사용', () => {
     const rent = baseItem('rent');
-    const op = baseItem('oplease');
+    const op = baseItem('oplease', {
+      monthlyQuote: {
+        financePayment: 700_000,
+        insurance: 100_000,
+        vehicleTax: 50_000,
+        maintenance: 30_000,
+        maintenanceBreakdownKnown: true,
+        serviceFee: 20_000,
+      },
+    });
     const c = baseCommon({ biz: 'personal' });
     expect(deductibleAt(rent, c, 24).depEquiv)
       .toBeCloseTo(financials(rent).monthly * 12 * 0.7, 4);
-    expect(deductibleAt(op, c, 24).depEquiv)
-      .toBeCloseTo(financials(op).monthly * 12 * 0.93, 4);
+    expect(deductibleAt(op, c, 24).depEquiv).toBe(720_000 * 12);
+    expect(deductibleAt(op, c, 24).annualCost).toBe(900_000 * 12);
+  });
+  it('운용리스 정비비 미구분 시 보험·자동차세 차감액의 7%를 정비비로 본다', () => {
+    const op = baseItem('oplease', {
+      monthlyQuote: {
+        financePayment: 700_000,
+        insurance: 100_000,
+        vehicleTax: 50_000,
+        maintenance: 0,
+        maintenanceBreakdownKnown: false,
+        serviceFee: 20_000,
+      },
+    });
+    expect(deductibleAt(op, baseCommon({ biz: 'personal' }), 24).depEquiv)
+      .toBeCloseTo((700_000 + 20_000) * 0.93 * 12, 4);
+  });
+  it('동일한 렌트 총대가는 선납·월납 구성과 무관하게 같은 비용과 감가상당액을 만든다', () => {
+    const noDown = baseItem('rent', {
+      months: 48,
+      ratePct: 0,
+      down: { mode: 'amount', value: 0 },
+      residual: { mode: 'amount', value: 0 },
+      vehicle: {
+        ...baseItem('rent').vehicle,
+        price: 48_000_000,
+      },
+    });
+    const withDown = baseItem('rent', {
+      ...noDown,
+      down: { mode: 'amount', value: 12_000_000 },
+    });
+    const common = baseCommon({ biz: 'personal' });
+    const without = deductibleAt(noDown, common, 24);
+    const prepaid = deductibleAt(withDown, common, 24);
+    expect(financials(noDown).monthly).toBe(1_000_000);
+    expect(financials(withDown).monthly).toBe(750_000);
+    expect(prepaid.annualCost).toBeCloseTo(without.annualCost, 4);
+    expect(prepaid.depEquiv).toBeCloseTo(without.depEquiv, 4);
+    expect(taxSavingAt(withDown, common, 24))
+      .toBeCloseTo(taxSavingAt(noDown, common, 24), 4);
   });
   it('만기 초과 m은 만기로 클램프 — 이자 발산 방지', () => {
     const item = baseItem('installment');
     expect(annualInterestAt(item, 120)).toBeCloseTo(annualInterestAt(item, 48), 4);
   });
-  it('실제 견적 월납은 잔액과 금융비용 계산에 함께 반영', () => {
+  it('실제 금융 원리금 월납은 잔액과 금융비용 계산에 함께 반영', () => {
     const calculated = baseItem('installment');
-    const quoted = baseItem('installment', { monthlyOverride: 2_000_000 });
+    const quoted = baseItem('installment', {
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        financePayment: 2_000_000,
+      },
+    });
     expect(annualInterestAt(quoted, 24)).not.toBeCloseTo(annualInterestAt(calculated, 24), 6);
     expect(remainingDebtEach(quoted, 24)).toBeLessThan(remainingDebtEach(calculated, 24));
   });
@@ -151,11 +204,109 @@ describe('annualInterestAt / deductibleAt — 항목 조립', () => {
   it('VAT 환급 렌트는 환급 VAT를 연비용과 감가상당액에서 제외', () => {
     const item = baseItem('rent', {
       vehicle: { ...baseItem('rent').vehicle, category: 'truck' },
-      monthlyOverride: 1_100_000,
+      monthlyQuote: {
+        ...baseItem('rent').monthlyQuote,
+        financePayment: 1_100_000,
+      },
     });
     const b = deductibleAt(item, baseCommon({ biz: 'personal' }), 12);
     expect(b.annualCost).toBeCloseTo(1_000_000 * 12, 4);
     expect(b.depEquiv).toBeCloseTo(1_000_000 * 12 * 0.7, 4);
+  });
+  it('소유형 월 부대비용은 비용에는 포함되지만 금융이자·잔액에는 섞이지 않는다', () => {
+    const base = baseItem('installment', {
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        financePayment: 900_000,
+      },
+    });
+    const bundled = baseItem('installment', {
+      monthlyQuote: {
+        ...base.monthlyQuote,
+        insurance: 100_000,
+        vehicleTax: 50_000,
+        maintenance: 30_000,
+        serviceFee: 20_000,
+      },
+    });
+    const common = baseCommon({ biz: 'personal' });
+    expect(annualInterestAt(bundled, 24)).toBeCloseTo(annualInterestAt(base, 24), 6);
+    expect(remainingDebtEach(bundled, 24)).toBeCloseTo(remainingDebtEach(base, 24), 6);
+    expect(deductibleAt(bundled, common, 24).annualCost -
+      deductibleAt(base, common, 24).annualCost).toBeCloseTo(200_000 * 12, 4);
+  });
+  it('할부 조기 완납 뒤에는 추가 금융납입·이자를 비용으로 만들지 않는다', () => {
+    const item = baseItem('installment', {
+      ratePct: 0,
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        financePayment: 10_000_000,
+      },
+    });
+    const common = baseCommon({ biz: 'personal' });
+    const at12 = deductibleAt(item, common, 12);
+    const at24 = deductibleAt(item, common, 24);
+    expect(annualInterestAt(item, 48)).toBe(0);
+    expect(at12.annualCost).toBeGreaterThan(0);
+    expect(at24.annualCost).toBeCloseTo(at12.depEquiv, 4);
+  });
+  it('VAT 적격 별도 연간 정비비는 공급가액만 비용에 포함한다', () => {
+    const item = baseItem('installment', {
+      vehicle: {
+        ...baseItem('installment').vehicle,
+        category: 'truck',
+      },
+      ratePct: 0,
+      maintenanceYr: 1_100_000,
+    });
+    const deductible = deductibleAt(
+      item,
+      baseCommon({ biz: 'personal' }),
+      12,
+    );
+    const f = financials(item);
+    expect(deductible.annualCost).toBeCloseTo(
+      (40_000_000 / 1.1 + f.acqTaxEach) / 5 + 1_000_000,
+      4,
+    );
+  });
+  it('VAT 적격 월 정비비와 같은 연간 정비비는 동일한 비용 기준을 만든다', () => {
+    const vehicle = {
+      ...baseItem('installment').vehicle,
+      category: 'truck' as const,
+    };
+    const monthly = baseItem('installment', {
+      vehicle,
+      ratePct: 0,
+      monthlyQuote: {
+        ...baseItem('installment').monthlyQuote,
+        maintenance: 110_000,
+      },
+    });
+    const annual = baseItem('installment', {
+      vehicle,
+      ratePct: 0,
+      maintenanceYr: 1_320_000,
+    });
+    const common = baseCommon({ biz: 'personal' });
+    expect(deductibleAt(monthly, common, 12).annualCost)
+      .toBeCloseTo(deductibleAt(annual, common, 12).annualCost, 4);
+  });
+  it('금융 종료 후 추가 연간비용은 종료 뒤 과세기간부터 비용에 포함한다', () => {
+    const item = baseItem('installment', {
+      months: 12,
+      ratePct: 0,
+      insuranceYr: 1_200_000,
+      postFinanceAnnualCosts: {
+        insurance: 1_200_000,
+        vehicleTax: 600_000,
+        maintenance: 600_000,
+      },
+    });
+    const common = baseCommon({ biz: 'personal' });
+    const yearOne = deductibleAt(item, common, 12);
+    const yearTwo = deductibleAt(item, common, 24);
+    expect(yearTwo.annualCost - yearOne.annualCost).toBeCloseTo(2_400_000, 4);
   });
 });
 
@@ -223,5 +374,44 @@ describe('taxSavingAt (스펙 §4.5 단계5)', () => {
     });
     expect(deductibleAt(item, c, 24).complianceBlocked).toBe(false);
     expect(taxSavingAt(item, c, 24)).toBeGreaterThan(0);
+  });
+  it('기본 승인기간 모드는 2026 스냅샷 12개월까지만 절감하고 장기 반복은 명시 선택한다', () => {
+    const item = baseItem('rent');
+    const approvedOnly = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'approvedOnly',
+    });
+    const assumeUnchanged = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'assumeUnchanged',
+    });
+    expect(taxSavingAt(item, approvedOnly, 48)).toBeCloseTo(
+      taxSavingAt(item, approvedOnly, 12),
+      4,
+    );
+    expect(taxSavingAt(item, assumeUnchanged, 48)).toBeCloseTo(
+      taxSavingAt(item, assumeUnchanged, 12) * 4,
+      4,
+    );
+  });
+  it('2026년 중간 시작은 연말까지 남은 승인기간만 세금절감을 계산한다', () => {
+    const item = baseItem('rent');
+    const january = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'approvedOnly',
+      taxStartDate: '2026-01-01',
+    });
+    const lateJuly = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'approvedOnly',
+      taxStartDate: '2026-07-28',
+    });
+    expect(taxSavingAt(item, lateJuly, 12)).toBeLessThan(
+      taxSavingAt(item, january, 12),
+    );
+    expect(taxSavingAt(item, lateJuly, 120)).toBeCloseTo(
+      taxSavingAt(item, lateJuly, 12),
+      4,
+    );
   });
 });

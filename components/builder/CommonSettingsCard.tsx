@@ -1,7 +1,14 @@
 'use client';
-import { MoneyInput, NumInput, SelectInput, Chips, Toggle } from '@/components/ui/Field';
-import { INDUSTRIES, REVENUE_LABELS } from '@/lib/engine/taxData';
-import type { BizType, CommonProfile } from '@/lib/engine/types';
+import {
+  MoneyInput, NumInput, SelectInput, Chips, Toggle, WarnBadge,
+} from '@/components/ui/Field';
+import {
+  INDUSTRIES, REVENUE_LABELS, TAX_RULE_EFFECTIVE_FROM,
+  TAX_RULE_EFFECTIVE_THROUGH, taxRuleMonthsFrom,
+} from '@/lib/engine/taxData';
+import type {
+  BizType, CommonProfile, TaxRuleHorizon, VatTaxType,
+} from '@/lib/engine/types';
 import { MAX_SCENARIOS } from '@/lib/state/persistence';
 import type { Action } from '@/lib/state/reducer';
 
@@ -11,6 +18,7 @@ export function CommonSettingsCard(props: {
   const { common, dispatch } = props;
   const set = (patch: Partial<CommonProfile>) => dispatch({ type: 'setCommon', patch });
   const atScenarioLimit = common.scenarios.length >= MAX_SCENARIOS;
+  const approvedMonths = taxRuleMonthsFrom(common.taxStartDate);
   return (
     <div className="card">
       <h3>공통 설정</h3>
@@ -25,6 +33,10 @@ export function CommonSettingsCard(props: {
           ]}
           onChange={(biz) => set({
             biz,
+            vatTaxType:
+              biz === 'corp' && common.vatTaxType === 'simplified'
+                ? 'general'
+                : common.vatTaxType,
             smallRealEstateCorp: biz === 'corp' ? common.smallRealEstateCorp : false,
             personalInsuranceRequired:
               biz === 'personal' ? common.personalInsuranceRequired : false,
@@ -33,6 +45,34 @@ export function CommonSettingsCard(props: {
       </div>
       {common.biz !== 'none' && (
         <>
+          <div className="section-label">부가세 과세유형</div>
+          <div className="row">
+            <Chips<VatTaxType>
+              ariaLabel="부가세 과세유형"
+              value={common.vatTaxType}
+              options={[
+                { key: 'general', label: '일반과세' },
+                ...(common.biz === 'personal'
+                  ? [{ key: 'simplified' as const, label: '간이과세' }]
+                  : []),
+                { key: 'exempt', label: '면세' },
+                { key: 'mixedOrUncertain', label: '겸영·불확실' },
+              ]}
+              onChange={(vatTaxType) => set({ vatTaxType })}
+            />
+          </div>
+          {common.vatTaxType !== 'general' && (
+            <p className="muted" style={{ marginBottom: 8 }}>
+              현재 모델은 일반과세자만 매입 VAT 공제를 계산합니다.
+              선택한 유형은 보수적으로 VAT 환급 0원 처리합니다.
+              {common.vatTaxType === 'simplified' &&
+                ' 과세사업용 자산 매각 VAT는 선택 업종의 법정 부가가치율로 추정합니다.'}
+              {common.vatTaxType === 'mixedOrUncertain' &&
+                ' 과세사업용 자산 매각 VAT는 과소계상 방지를 위해 10/110을 적용합니다.'}
+              {common.vatTaxType === 'exempt' &&
+                ' 면세사업 전용 자산에는 매각 VAT를 적용하지 않습니다.'}
+            </p>
+          )}
           <div className="row">
             <SelectInput
               label="업종" value={common.industryIndex}
@@ -55,6 +95,58 @@ export function CommonSettingsCard(props: {
               onChange={(marginalRateOverride) => set({ marginalRateOverride })}
             />
           </div>
+          <div className="section-label">세법 적용기간</div>
+          <div className="row">
+            <div className="field">
+              <label htmlFor="tax-start-date">계산·차량 사용 시작일</label>
+              <input
+                id="tax-start-date"
+                type="date"
+                min={TAX_RULE_EFFECTIVE_FROM}
+                max={TAX_RULE_EFFECTIVE_THROUGH}
+                value={common.taxStartDate}
+                onChange={(event) => set({ taxStartDate: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="row">
+            <Chips<TaxRuleHorizon>
+              ariaLabel="세법 적용기간"
+              value={common.taxRuleHorizon}
+              options={[
+                {
+                  key: 'approvedOnly',
+                  label: `남은 승인기간 ${Math.round(approvedMonths * 10) / 10}개월만`,
+                },
+                { key: 'assumeUnchanged', label: '이후에도 동일 가정' },
+              ]}
+              onChange={(taxRuleHorizon) => set({ taxRuleHorizon })}
+            />
+          </div>
+          {common.taxRuleHorizon === 'assumeUnchanged' ? (
+            <div className="row">
+              <WarnBadge>
+                2026 승인 규칙이 이후에도 바뀌지 않는다는 시나리오입니다.
+              </WarnBadge>
+            </div>
+          ) : (
+            <>
+              <p className="muted" style={{ marginBottom: 8 }}>
+                입력 시작일부터 {TAX_RULE_EFFECTIVE_THROUGH}까지의 승인 범위를
+                넘어서는 기간에는 세금절감과 VAT 환급 같은 혜택을 추가하지
+                않습니다. 매각 VAT와 인수 취득세는 0원 절벽을 막기 위해
+                2026 규칙을 보수적으로 계속 적용합니다.
+              </p>
+              {approvedMonths <= 0 && (
+                <div className="row">
+                  <WarnBadge>
+                    현재 승인 범위 밖의 시작일이라 세금혜택은 0원이며,
+                    납부세금만 2026 규칙으로 보수 추정합니다.
+                  </WarnBadge>
+                </div>
+              )}
+            </>
+          )}
           {common.biz === 'personal' && (
             <div className="row">
               <Toggle
@@ -82,13 +174,22 @@ export function CommonSettingsCard(props: {
         />
       </div>
       {common.biz === 'corp' && (
-        <div className="row">
-          <Toggle
-            label="부동산임대업 주업 소규모 법인 특례 3요건 모두 충족"
-            checked={common.smallRealEstateCorp}
-            onChange={(smallRealEstateCorp) => set({ smallRealEstateCorp })}
-          />
-        </div>
+        <>
+          <div className="row">
+            <Toggle
+              label="부동산임대업 주업 소규모 법인 특례 3요건 모두 충족"
+              checked={common.smallRealEstateCorp}
+              onChange={(smallRealEstateCorp) => set({ smallRealEstateCorp })}
+            />
+          </div>
+          {common.smallRealEstateCorp && (
+            <p className="muted" style={{ marginBottom: 8 }}>
+              차량 비용한도만 500만·감가상당액 한도 400만원으로 바뀝니다.
+              2026 소규모법인 세율 대상·제외법인·과세표준은 별도이므로 세율을
+              자동 20%로 강제하지 않습니다.
+            </p>
+          )}
+        </>
       )}
       <div className="section-label">비교 시점 시나리오</div>
       {common.scenarios.map((s, i) => (

@@ -29,6 +29,61 @@
 브라우저는 MCP를 직접 호출하지 않는다. 수집·정규화·검증은 서버 또는 정기
 작업에서 수행하고, 배포된 계산기는 승인된 규칙 스냅샷만 읽는다.
 
+## 구현 상태
+
+저장소에는 로컬·CI 관리자용 stdio MCP와 Codex 프로젝트 설정이 구현되어 있다.
+`.codex/config.toml`은 신뢰된 프로젝트에서 `kr_tax_law` 서버를 시작하고,
+`LAW_OPEN_API_OC`라는 환경변수 이름만 전달한다. 키 값은 설정 파일이나 저장소에
+기록하지 않는다.
+
+```bash
+npm run tax:mcp:smoke
+# 본인에게 발급된 LAW_OPEN_API_OC를 셸 환경에 설정한 경우
+npm run tax:mcp:live-smoke
+```
+
+이 명령은 별도 stdio 프로세스에 연결해 도구 목록과 승인 스냅샷을 실제 MCP
+JSON-RPC로 왕복 검증한다. 현재 도구는 모두 읽기 전용이다.
+`live-smoke`는 같은 경로로 지방세법 제127조를 실조회해 API 신청·키·응답
+스키마까지 확인하되 원문이나 키를 콘솔에 출력하지 않는다.
+
+- `get_approved_tax_rule_snapshot`
+- `get_official_law_article`
+- `get_law_article_change_history`
+- `review_law_article_changes`
+
+승인 스냅샷 조회는 API 키 없이 동작한다. 공식 원문 도구는 키가 없을 때
+`LAW_OPEN_API_OC` 설정 오류로 안전하게 종료하며, 임의 URL·신고·납부·승인·쓰기
+기능은 제공하지 않는다. 프로젝트 설정 변경은 새 Codex 세션 또는 클라이언트
+재시작 후 활성화되고 `/mcp` 또는 `codex mcp list`로 확인할 수 있다.
+
+계산 엔진은 `tax-rules/approved/KR/2026.json`을 스키마 검증·동결한
+`KR-2026-car-finance` 규칙만 읽는다. MCP 원문 응답이 이 파일을 자동 변경하는
+경로는 없다.
+
+## 공식 API 호출 계약
+
+현행 조문은 법령명 allowlist의 정확한 이름으로
+`https://www.law.go.kr/DRF/lawSearch.do`의 `target=eflaw`, `nw=3`,
+`type=JSON`, `display=100`을 조회한다. 검색 응답에서 정확히 일치하는 하나의
+`법령ID`, `법령일련번호(MST)`, `시행일자(efYd)`를 고른 뒤
+`https://www.law.go.kr/DRF/lawService.do`에
+`target=eflaw&MST=...&efYd=...&JO=...`로 본문을 요청한다.
+
+`ID`만 사용하는 현행 본문 조회는 `efYd`가 무시되어 특정 시행본을 재현할 수
+없으므로 사용하지 않는다. 조문 번호는 제127조를 `012700`, 제10조의2를
+`001002`처럼 6자리 `JO`로 정규화한다. 변경 이력은 안정적인 법령 ID와 `JO`를
+`target=lsJoHstInf`에 전달한다.
+
+공식 API는 오류도 HTTP 200, HTML, 빈 본문 또는 예상과 다른 JSON으로 반환할 수
+있다. 따라서 구현은 HTTPS·정확한 호스트·고정 경로, 리디렉션 금지, JSON MIME,
+1MiB 응답 한도, 타임아웃, 예상 root와 성공 코드, 필수 식별자·본문을 모두
+검증하고 모르는 응답은 실패 처리한다. 검색 결과의 단건 객체/복수 배열과
+강조 표시 객체도 정규화한다.
+
+응답의 `법령상세링크`에는 `OC`가 포함될 수 있으므로 반환 전에 키와 `OC` 쿼리를
+제거한다. MCP가 내보내는 출처 endpoint에는 인증 쿼리를 넣지 않는다.
+
 ## 공식 데이터 원천
 
 | 원천 | 용도 | 적합성 및 제한 |
@@ -75,10 +130,9 @@ namespace와 배포 메타데이터 확인에 도움을 줄 뿐, 서버 코드�
 
 ## 권장 MCP 도구
 
-- `get_law_article(law, article, asOfDate)`
-- `diff_law_article(law, article, fromDate, toDate)`
+현재 구현된 조문·스냅샷 도구 외에 다음 단계에서 고려할 도구는 아래 두 개다.
+
 - `get_vehicle_standard_value(officialVehicleKey, taxLiabilityDate)`
-- `get_approved_tax_rule_snapshot(ruleSetId)`
 - `list_pending_rule_changes()`
 
 `get_approved_tax_rule_snapshot`은 승인·커밋된 스냅샷만 조회하며 새 규칙을
@@ -122,8 +176,9 @@ namespace와 배포 메타데이터 확인에 도움을 줄 뿐, 서버 코드�
 1. 금융기간과 실제 보유기간을 분리한다.
 2. 차량 처분손익과 출구별 세금을 먼저 계산한 뒤 세후 최적 출구를 선택하는
    연도별 세금 원장을 만든다.
-3. 실제 월납을 금융 원리금, 보험·자동차세·정비·서비스비로 분리하고 운용리스
-   월납의 93% 고정 근사를 계약서상 실제 구성으로 대체한다.
+3. 실제 월납을 금융 원리금, 보험·자동차세·정비·서비스비로 분리한다. 운용리스
+   정비비가 구분되면 실제 구성으로 계산하고, 구분되지 않을 때만 보험·자동차세
+   차감 후 금액의 7%를 정비비로 보는 대체 규칙을 사용한다.
 4. 연도별 과세표준과 개인·법인지방소득세를 반영한다. 단일 한계세율은 누진구간
    경계를 생략하는 명시적 시나리오 override로만 제공하고 불확실성 범위를 표시한다.
 5. VAT 과세유형·업무사용비율·증빙 여부와 보험 가입일수, 감가상각 한도 초과액

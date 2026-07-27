@@ -39,6 +39,9 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Verify read-only tax MCP over stdio
+        run: npm run tax:mcp:smoke
+
       - name: Check TypeScript
         run: npm run typecheck
 
@@ -47,6 +50,9 @@ jobs:
 
       - name: Verify Sites build
         run: npm run verify:sites-build
+
+      - name: Verify AdSense release gates
+        run: npm run verify:adsense-release
 
   browser-e2e:
     name: Browser E2E

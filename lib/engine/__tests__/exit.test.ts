@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   exitOptionsAt, financials, ownershipMaturityNetOutflowEach,
-  remainingDebtEach, sunkAt,
+  remainingDebtEach, resaleOutputVatFraction, sunkAt,
 } from '../costAt';
 import { monthlyRate, remBal } from '../pmt';
 import { baseCommon, baseItem } from './fixtures';
@@ -167,7 +167,7 @@ describe('exitOptionsAt (스펙 §4.4)', () => {
     expect(depositExit).toBeCloseTo(baseExit, 4);
   });
 
-  it('VAT 공제 차량 매각은 매출 VAT를 제외한 시세를 회수하고 운용리스 인수 VAT도 공제', () => {
+  it('일반과세 사업용 자산 매각은 매입 VAT 공제 여부와 별개로 매출 VAT를 차감한다', () => {
     const biz = baseCommon({ biz: 'personal' });
     const truckVehicle = {
       ...baseItem('installment').vehicle,
@@ -181,6 +181,20 @@ describe('exitOptionsAt (스펙 §4.4)', () => {
       4,
     );
 
+    const passengerWithoutEvidence = baseItem('installment', {
+      tax: {
+        ...baseItem('installment').tax,
+        hasQualifiedEvidence: false,
+      },
+    });
+    const passengerResult = exitOptionsAt(passengerWithoutEvidence, biz, 24);
+    expect(passengerResult.best.cost).toBeCloseTo(
+      sunkAt(passengerWithoutEvidence, biz, 24) +
+        remainingDebtEach(passengerWithoutEvidence, 24) -
+        28_900_000 / 1.1,
+      4,
+    );
+
     const op = baseItem('oplease', {
       vehicle: { ...truckVehicle },
       acqTaxRatePct: 5,
@@ -191,6 +205,133 @@ describe('exitOptionsAt (스펙 §4.4)', () => {
     const buyout = opResult.options.find((option) => option.kind === 'buyoutSell')!;
     expect(buyout.cost).toBeCloseTo(
       sunkAt(op, biz, 24) + debt / 1.1 + tax - 28_900_000 / 1.1,
+      4,
+    );
+  });
+
+  it('개인·면세 전용 등 과세사업용 자산이 아니면 매각 시 매출 VAT를 차감하지 않는다', () => {
+    const biz = baseCommon({ biz: 'personal' });
+    const item = baseItem('installment', {
+      tax: {
+        ...baseItem('installment').tax,
+        isTaxableBusinessAsset: false,
+      },
+    });
+    const result = exitOptionsAt(item, biz, 24);
+    expect(result.best.cost).toBeCloseTo(
+      sunkAt(item, biz, 24) + remainingDebtEach(item, 24) - 28_900_000,
+      4,
+    );
+  });
+
+  it('간이과세 매각 VAT는 선택 업종 부가가치율을, 겸영·불확실은 일반세율을 보수 적용한다', () => {
+    const item = baseItem('installment');
+    const simplifiedRetail = baseCommon({
+      biz: 'personal',
+      vatTaxType: 'simplified',
+      industryIndex: 1,
+    });
+    const mixed = baseCommon({
+      biz: 'personal',
+      vatTaxType: 'mixedOrUncertain',
+    });
+    const exempt = baseCommon({
+      biz: 'personal',
+      vatTaxType: 'exempt',
+    });
+
+    expect(resaleOutputVatFraction(item, simplifiedRetail, 24)).toBeCloseTo(0.15 * 0.1, 8);
+    expect(resaleOutputVatFraction(item, mixed, 24)).toBeCloseTo(10 / 110, 8);
+    expect(resaleOutputVatFraction(item, exempt, 24)).toBe(0);
+
+    const simplifiedExit = exitOptionsAt(item, simplifiedRetail, 24);
+    expect(simplifiedExit.best.cost).toBeCloseTo(
+      sunkAt(item, simplifiedRetail, 24)
+        + remainingDebtEach(item, 24)
+        - 28_900_000 * (1 - 0.15 * 0.1),
+      4,
+    );
+  });
+
+  it('approvedOnly는 승인기간 뒤 혜택은 중단하고 매각·인수 납부세금은 보수 유지한다', () => {
+    const approvedOnly = baseCommon({
+      biz: 'personal',
+      taxRuleHorizon: 'approvedOnly',
+      taxStartDate: '2026-01-01',
+    });
+    const repeated = {
+      ...approvedOnly,
+      taxRuleHorizon: 'assumeUnchanged' as const,
+    };
+    const installment = baseItem('installment');
+    const approvedExit = exitOptionsAt(installment, approvedOnly, 24);
+    const repeatedExit = exitOptionsAt(installment, repeated, 24);
+    expect(approvedExit.best.cost).toBeCloseTo(repeatedExit.best.cost, 4);
+    expect(resaleOutputVatFraction(installment, approvedOnly, 11.999999))
+      .toBeCloseTo(resaleOutputVatFraction(installment, approvedOnly, 12), 8);
+
+    const operatingLease = baseItem('oplease', {
+      vehicle: {
+        ...baseItem('oplease').vehicle,
+        category: 'truck',
+      },
+      tax: {
+        ...baseItem('oplease').tax,
+        isTaxableBusinessAsset: false,
+      },
+      acqTaxRatePct: 0,
+    });
+    const approvedBuyout = exitOptionsAt(operatingLease, approvedOnly, 24)
+      .options.find((option) => option.kind === 'buyoutSell')!;
+    const repeatedBuyout = exitOptionsAt(operatingLease, repeated, 24)
+      .options.find((option) => option.kind === 'buyoutSell')!;
+    expect(approvedBuyout.cost - repeatedBuyout.cost).toBeCloseTo(
+      remainingDebtEach(operatingLease, 24) * (10 / 110),
+      4,
+    );
+
+    const acquisitionTaxLease = baseItem('oplease', {
+      tax: {
+        ...baseItem('oplease').tax,
+        hasQualifiedEvidence: false,
+        isTaxableBusinessAsset: false,
+      },
+      acqTaxRatePct: 5,
+    });
+    const approvedAcquisition = exitOptionsAt(acquisitionTaxLease, approvedOnly, 24)
+      .options.find((option) => option.kind === 'buyoutSell')!;
+    const repeatedAcquisition = exitOptionsAt(acquisitionTaxLease, repeated, 24)
+      .options.find((option) => option.kind === 'buyoutSell')!;
+    expect(approvedAcquisition.cost).toBeCloseTo(repeatedAcquisition.cost, 4);
+  });
+
+  it('경차 운용리스 인수가 감면 일몰 뒤면 75만원을 차감하지 않는다', () => {
+    const item = baseItem('oplease', {
+      vehicle: {
+        ...baseItem('oplease').vehicle,
+        price: 100_000_000,
+        category: 'compact',
+      },
+      months: 48,
+      acqTaxRatePct: 4,
+      tax: {
+        ...baseItem('oplease').tax,
+        isTaxableBusinessAsset: false,
+      },
+    });
+    const commonAfterExpiry = baseCommon({
+      taxStartDate: '2026-01-01',
+      taxRuleHorizon: 'approvedOnly',
+    });
+    const result = exitOptionsAt(item, commonAfterExpiry, 48);
+    const debt = remainingDebtEach(item, 48);
+    const fullAcquisitionTax = Math.round((debt / 1.1) * 0.04);
+    const buyout = result.options.find((option) => option.kind === 'buyoutSell')!;
+    expect(buyout.cost).toBeCloseTo(
+      sunkAt(item, commonAfterExpiry, 48)
+        + debt
+        + fullAcquisitionTax
+        - result.resaleEach,
       4,
     );
   });

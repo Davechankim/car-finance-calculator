@@ -1,10 +1,12 @@
 // lib/engine/tax.ts — 업무용승용차 비용 인정·세금절감 (스펙 §4.5)
 import {
-  financials, isVatRefundEligible, remainingDebtEach,
+  cumulativeFinancePaymentsEach, financials, isVatRefundEligible,
+  isVehiclePurchaseVatRefundEligible, remainingDebtEach,
 } from './costAt';
 import {
   annualCostLimit, annualDepLimit, DEP_EQUIV_RATE, DEP_YEARS,
-  isExempt, marginalRate, VAT_FRACTION,
+  isBusinessPassengerLimitExempt, marginalRate,
+  OPLEASE_UNKNOWN_MAINTENANCE_RATE, taxRuleApplicableMonths, VAT_FRACTION,
 } from './taxData';
 import type { CommonProfile, FinanceItem } from './types';
 import { isOwnershipMethod } from './types';
@@ -48,18 +50,21 @@ export function deductibleFromParts(p: {
   };
 }
 
-/** 실제 월납 기준 누적 평균 연 금융비용: (누적납입 − 원금상환분) / 연수. */
+/** 실제 금융 원리금 월납 기준 누적 평균 연 금융비용. */
 export function annualInterestAt(item: FinanceItem, m: number): number {
   const mc = Math.min(Math.max(m, 0), item.months); // 만기 초과 시 이자 발산 방지 — costAt 모듈 클램프 규약과 동일
   if (mc <= 0) return 0;
   const f = financials(item);
   const yrs = mc / 12;
   const repaid = f.principal - remainingDebtEach(item, mc);
-  return Math.max((f.monthly * mc - repaid) / yrs, 0);
+  return Math.max((cumulativeFinancePaymentsEach(item, mc) - repaid) / yrs, 0);
 }
 
 export function isComplianceBlocked(item: FinanceItem, common: CommonProfile): boolean {
-  if (common.biz === 'none' || isExempt(item.vehicle.category)) return false;
+  if (
+    common.biz === 'none' ||
+    isBusinessPassengerLimitExempt(item.vehicle.category)
+  ) return false;
   const insuranceRequired =
     common.biz === 'corp' || (common.biz === 'personal' && common.personalInsuranceRequired);
   if (insuranceRequired && !item.tax.hasDedicatedInsurance) return true;
@@ -79,8 +84,8 @@ function financeCostsBetween(
   const months = segmentEnd - segmentStart;
   if (months <= 0) return { annualCost: 0, depEquiv: 0, fraction: 0 };
   const fraction = months / 12;
-  const f = financials(item);
-  const vehicleBasis = isVatRefundEligible(item, common)
+  const f = financials(item, common);
+  const vehicleBasis = isVehiclePurchaseVatRefundEligible(item, common)
     ? item.vehicle.price * (1 - VAT_FRACTION)
     : item.vehicle.price;
   // 매입자산 취득가액에는 취득세가 포함된다. 기타 초기비용은 성격이
@@ -95,10 +100,44 @@ function financeCostsBetween(
   const financeMonths = Math.max(financeEnd - financeStart, 0);
   const repaid =
     remainingDebtEach(item, financeStart) - remainingDebtEach(item, financeEnd);
-  const interestSegment = Math.max(f.monthly * financeMonths - repaid, 0);
-  const ancillaryAnnual = item.insuranceYr + item.maintenanceYr;
+  const financePayments =
+    cumulativeFinancePaymentsEach(item, financeEnd) -
+    cumulativeFinancePaymentsEach(item, financeStart);
+  const interestSegment = Math.max(financePayments - repaid, 0);
+  const monthlyMaintenanceBasis = isVatRefundEligible(item, common)
+    ? item.monthlyQuote.maintenance * (1 - VAT_FRACTION)
+    : item.monthlyQuote.maintenance;
+  const bundledMonthlyCost =
+    item.monthlyQuote.insurance +
+    item.monthlyQuote.vehicleTax +
+    monthlyMaintenanceBasis +
+    item.monthlyQuote.serviceFee;
+  const bundledSegment = bundledMonthlyCost * financeMonths;
+  const maintenanceBasis = isVatRefundEligible(item, common)
+    ? item.maintenanceYr * (1 - VAT_FRACTION)
+    : item.maintenanceYr;
+  const ancillaryAnnual =
+    item.insuranceYr + item.vehicleTaxYr + maintenanceBasis;
+  const postMaintenanceBasis = isVatRefundEligible(item, common)
+    ? item.postFinanceAnnualCosts.maintenance * (1 - VAT_FRACTION)
+    : item.postFinanceAnnualCosts.maintenance;
+  const postFinanceAnnual =
+    item.postFinanceAnnualCosts.insurance +
+    item.postFinanceAnnualCosts.vehicleTax +
+    postMaintenanceBasis;
+  const postFinanceStart = Math.max(segmentStart, item.months);
+  const postFinanceMonths = Math.max(segmentEnd - postFinanceStart, 0);
+  const postFinanceFraction = postFinanceMonths / 12;
   return {
-    annualCost: (depSegment + interestSegment + ancillaryAnnual * fraction) / fraction,
+    annualCost:
+      (
+        depSegment +
+        interestSegment +
+        bundledSegment +
+        ancillaryAnnual * fraction +
+        postFinanceAnnual * postFinanceFraction
+      ) /
+      fraction,
     depEquiv: depSegment / fraction,
     fraction,
   };
@@ -106,24 +145,56 @@ function financeCostsBetween(
 
 /** 항목 → 마지막 과세기간의 연환산 파츠 조립 (1대당). */
 export function deductibleAt(item: FinanceItem, common: CommonProfile, m: number): DeductibleBreakdown {
-  const f = financials(item);
-  const ancillary = item.insuranceYr + item.maintenanceYr;
+  const applicableMonth = taxRuleApplicableMonths(common, m);
+  const f = financials(item, common);
+  const maintenanceBasis = isVatRefundEligible(item, common)
+    ? item.maintenanceYr * (1 - VAT_FRACTION)
+    : item.maintenanceYr;
+  const ancillary = item.insuranceYr + item.vehicleTaxYr + maintenanceBasis;
   let annualCost: number;
   let depEquiv: number;
   if (item.method === 'rent' || item.method === 'oplease') {
     const deductibleMonthly = item.method === 'rent' && isVatRefundEligible(item, common)
-      ? f.monthly * (1 - VAT_FRACTION)
+      ? (
+          f.monthlyVatTaxable * (1 - VAT_FRACTION) +
+          item.monthlyQuote.insurance +
+          item.monthlyQuote.vehicleTax
+        )
       : f.monthly;
-    annualCost = deductibleMonthly * 12 + ancillary;
-    depEquiv = deductibleMonthly * 12 * (DEP_EQUIV_RATE[item.method] ?? 1);
+    const annualizedDownGross = item.months > 0
+      ? f.downEach * (12 / item.months)
+      : 0;
+    const annualizedDown =
+      item.method === 'rent' && isVatRefundEligible(item, common)
+        ? annualizedDownGross * (1 - VAT_FRACTION)
+        : annualizedDownGross;
+    annualCost = deductibleMonthly * 12 + annualizedDown + ancillary;
+    depEquiv = item.method === 'rent'
+      ? (
+          deductibleMonthly * 12 +
+          annualizedDown
+        ) * (DEP_EQUIV_RATE.rent ?? 1)
+      : item.monthlyQuote.maintenanceBreakdownKnown
+        ? (
+            (f.financeMonthly + item.monthlyQuote.serviceFee) * 12 +
+            annualizedDown
+          )
+        : (
+            (
+              f.monthly -
+              item.monthlyQuote.insurance -
+              item.monthlyQuote.vehicleTax
+            ) * 12 +
+            annualizedDown
+          ) * (1 - OPLEASE_UNKNOWN_MAINTENANCE_RATE);
   } else {
-    const mc = Math.max(m, 0);
+    const mc = applicableMonth;
     const start = mc > 0 ? Math.floor((mc - 1) / 12) * 12 : 0;
     ({ annualCost, depEquiv } = financeCostsBetween(item, common, start, mc));
   }
   const result = deductibleFromParts({
     annualCost, depEquiv,
-    exempt: isExempt(item.vehicle.category),
+    exempt: isBusinessPassengerLimitExempt(item.vehicle.category),
     useDrivingLog: item.tax.useDrivingLog,
     bizUsePct: item.tax.bizUsePct,
     costLimit: annualCostLimit(common),
@@ -149,7 +220,7 @@ function cumulativeFinanceDeductible(
     const breakdown = deductibleFromParts({
       annualCost,
       depEquiv,
-      exempt: isExempt(item.vehicle.category),
+      exempt: isBusinessPassengerLimitExempt(item.vehicle.category),
       useDrivingLog: item.tax.useDrivingLog,
       bizUsePct: item.tax.bizUsePct,
       costLimit: annualCostLimit(common),
@@ -161,9 +232,11 @@ function cumulativeFinanceDeductible(
   return total;
 }
 
+export { taxRuleApplicableMonths } from './taxData';
+
 /** 항목 전체 세금절감 (시점 m) */
 export function taxSavingAt(item: FinanceItem, common: CommonProfile, m: number): number {
-  const requested = Math.max(m, 0);
+  const requested = taxRuleApplicableMonths(common, m);
   const mc = isOwnershipMethod(item.method)
     ? requested
     : Math.min(requested, item.months);
