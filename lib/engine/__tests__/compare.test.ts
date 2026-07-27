@@ -32,19 +32,19 @@ describe('compareAll (스펙 §5)', () => {
     expect(at60.netCost).toBe(at48.netCost);
   });
 
-  it('bestPoint: 자기 계약기간 내 후보들의 최소와 일치', () => {
+  it('bestPoint: 0개월을 제외한 자기 계약기간 내 후보들의 최소와 일치', () => {
     const r = compareAll(state());
     const a = r.series.find((s) => s.itemId === 'a')!;
     const item = state().items[0];
-    const candidates = r.gridMonths.filter((m) => m <= 48);
+    const candidates = r.gridMonths.filter((m) => m >= 3 && m <= 48);
     const manualMin = Math.min(...candidates.map((m) => costAt(item, baseCommon(), m).netCost));
     expect(a.bestPoint.netCost).toBeCloseTo(manualMin, 4);
+    expect(a.bestPoint.m).toBeGreaterThanOrEqual(3);
   });
 
-  it('globalBest = 모든 (항목, 시점) 중 최소', () => {
+  it('공통 보유기간 비교와 혼동되는 globalBest를 결과에 제공하지 않는다', () => {
     const r = compareAll(state());
-    const allBest = Math.min(...r.series.map((s) => s.bestPoint.netCost));
-    expect(r.globalBest!.netCost).toBeCloseTo(allBest, 4);
+    expect(r).not.toHaveProperty('globalBest');
   });
 
   it('시나리오 행: 시점마다 전 항목 스냅샷 + 최저 항목 표시', () => {
@@ -57,28 +57,40 @@ describe('compareAll (스펙 §5)', () => {
     expect(row.bestItemId).toBe(min.itemId);
   });
 
-  it('항목 0개 → 빈 결과, 1개 → 단독 분석 (globalBest는 그 항목)', () => {
-    expect(compareAll({ common: baseCommon(), items: [] }).globalBest).toBeNull();
-    const r = compareAll({ common: baseCommon(), items: [baseItem('rent', { id: 'x' })] });
-    expect(r.globalBest!.itemId).toBe('x');
+  it('시나리오 최저 항목은 이미 만료된 계약을 제외하고, 모두 만료되면 null', () => {
+    const st = state({
+      common: baseCommon({
+        scenarios: [
+          { atMonths: 60, label: '5년 후' },
+          { atMonths: 90, label: '7년 6개월 후' },
+        ],
+      }),
+    });
+    const r = compareAll(st);
+    expect(r.scenarioRows[0].cells.find((c) => c.itemId === 'a')!.snapshot.ended).toBe(true);
+    expect(r.scenarioRows[0].bestItemId).toBe('b');
+    expect(r.scenarioRows[1].bestItemId).toBeNull();
   });
 
-  it('그리드 외 만기점(55개월, 비최장 항목): 만기 후보가 추가되어 bestPoint에 반영된다', () => {
-    // horizon=60 → grid에 55 없음 → candidates.push(55) 분기가 실제로 실행되는 구성
+  it('항목 0개 → 빈 결과, 1개 → 단독 분석', () => {
+    const empty = compareAll({ common: baseCommon(), items: [] });
+    expect(empty).toEqual({ horizon: 0, gridMonths: [], series: [], scenarioRows: [] });
+    const r = compareAll({ common: baseCommon(), items: [baseItem('rent', { id: 'x' })] });
+    expect(r.series).toHaveLength(1);
+    expect(r.series[0].itemId).toBe('x');
+  });
+
+  it('3개월 그리드 밖인 모든 항목의 정확한 만기점도 차트·표·bestPoint에 포함한다', () => {
     const odd = baseItem('installment', { id: 'odd', months: 55 });
     const r = compareAll({
       common: baseCommon(),
       items: [odd, baseItem('oplease', { id: 'long', months: 60 })],
     });
-    expect(r.gridMonths).not.toContain(55); // 전제 확인: 55는 그리드 밖
+    expect(r.gridMonths).toContain(55);
     const s = r.series.find((x) => x.itemId === 'odd')!;
-    // bestPoint는 그리드 내 후보(≤55) ∪ {정확한 만기 55} 의 최소
-    const gridCandidates = r.gridMonths.filter((m) => m <= 55);
-    const manualMin = Math.min(
-      ...gridCandidates.concat([55]).map((m) => costAt(odd, baseCommon(), m).netCost),
-    );
+    const gridCandidates = r.gridMonths.filter((m) => m >= 3 && m <= 55);
+    const manualMin = Math.min(...gridCandidates.map((m) => costAt(odd, baseCommon(), m).netCost));
     expect(s.bestPoint.netCost).toBeCloseTo(manualMin, 4);
-    // 만기점이 최적이면 m=55가 그대로 보고될 수 있어야 함 (값 일관성)
     expect(s.bestPoint.m).toBeLessThanOrEqual(55);
   });
 });

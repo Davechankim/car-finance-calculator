@@ -9,17 +9,26 @@ export function baseItem(method: Method, over: Partial<FinanceItem> = {}): Finan
     months: 48,
     ratePct: 6,
     down: { mode: 'amount', value: 0 },
-    residual: method === 'oplease' || method === 'finlease' ? { mode: 'pct', value: 30 } : null,
+    deposit: method === 'installment' ? null : { mode: 'amount', value: 0 },
+    residual: method === 'installment' ? null : { mode: 'pct', value: 30 },
     loanAmount: null,
+    monthlyOverride: null,
+    upfrontFee: 0,
     insuranceYr: 0,
     maintenanceYr: 0,
     subsidy: 0,
     acqTaxRatePct: 7,
-    tax: { useDrivingLog: false, bizUsePct: 100 },
+    tax: {
+      useDrivingLog: false,
+      bizUsePct: 100,
+      hasDedicatedInsurance: true,
+      corporatePlateRequired: false,
+      hasCorporatePlate: true,
+    },
     depreciation: { depRatePct: 15, floorPct: 25, resaleOverrides: [] },
     exit: {
       canTransfer: false, transferFee: 0, penaltyPct: 0,
-      returnInspFee: 0, mileagePenalty: 0, earlyDiscount: 0,
+      returnInspFee: 0, mileagePenalty: 0, earlyDiscount: 0, buyoutFee: 0,
     },
     ...over,
   };
@@ -28,7 +37,8 @@ export function baseItem(method: Method, over: Partial<FinanceItem> = {}): Finan
 export function baseCommon(over: Partial<CommonProfile> = {}): CommonProfile {
   return {
     biz: 'none', industryIndex: 0, revenueIndex: 2,
-    marginalRateOverride: null, assetReturnPct: 0, tradeIn: 0, scenarios: [],
+    marginalRateOverride: null, assetReturnPct: 0, tradeIn: 0,
+    targetMonths: 48, smallRealEstateCorp: false, personalInsuranceRequired: false, scenarios: [],
     ...over,
   };
 }

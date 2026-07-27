@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { financials, sunkAt, vatRefundCumEach } from '../costAt';
+import {
+  financials, remainingDebtEach, sunkAt, vatRefundCumEach,
+} from '../costAt';
 import { baseCommon, baseItem } from './fixtures';
 
 describe('financials — 방식별 금융 구조 (스펙 §4.2)', () => {
-  it('케이스 B: 운용리스 원금 = 4,000만−1,200만−1,200만 = 1,600만, 월납은 렌트·할부보다 낮다', () => {
+  it('케이스 B: 리스 최초잔액은 차량가−선납, 잔존은 balloon으로 이자를 포함한다', () => {
     const op = financials(baseItem('oplease', { ratePct: 4.5, down: { mode: 'pct', value: 30 } }));
     const rent = financials(baseItem('rent', { ratePct: 5.9, down: { mode: 'pct', value: 30 } }));
     const inst = financials(baseItem('installment', { ratePct: 5.5, down: { mode: 'pct', value: 30 } }));
-    expect(op.principal).toBe(16_000_000);
+    expect(op.principal).toBe(28_000_000);
     expect(rent.principal).toBe(28_000_000);
     expect(inst.principal).toBe(28_000_000); // loanAmount null → 상한 = 차량가−선납
     expect(op.monthly).toBeLessThan(rent.monthly);
@@ -23,17 +25,56 @@ describe('financials — 방식별 금융 구조 (스펙 §4.2)', () => {
     expect(under.cashExtraEach).toBe(8_000_000);
   });
 
-  it('케이스 K: 취득세는 금융리스·할부만 (4,000만×7% = 280만)', () => {
-    expect(financials(baseItem('finlease')).acqTaxEach).toBe(2_800_000);
-    expect(financials(baseItem('installment')).acqTaxEach).toBe(2_800_000);
+  it('케이스 K: 취득세는 금융리스·할부만 (부가세 제외 공급가액×7%)', () => {
+    const expected = Math.round((40_000_000 / 1.1) * 0.07);
+    expect(financials(baseItem('finlease')).acqTaxEach).toBe(expected);
+    expect(financials(baseItem('installment')).acqTaxEach).toBe(expected);
     expect(financials(baseItem('rent')).acqTaxEach).toBe(0);
     expect(financials(baseItem('oplease')).acqTaxEach).toBe(0);
+    const compact = baseItem('installment', {
+      vehicle: { ...baseItem('installment').vehicle, category: 'compact' },
+      acqTaxRatePct: 4,
+    });
+    expect(financials(compact).acqTaxEach)
+      .toBe(Math.max(Math.round((40_000_000 / 1.1) * 0.04) - 750_000, 0));
   });
 
-  it('엣지: 선납+잔존 > 차량가 → 원금 0, 월납 0', () => {
-    const f = financials(baseItem('finlease', { down: { mode: 'pct', value: 80 }, residual: { mode: 'pct', value: 30 } }));
-    expect(f.principal).toBe(0);
+  it('엣지: 과도한 잔존은 무납입 만기잔액으로 제한해 가상 채무를 만들지 않는다', () => {
+    const item = baseItem('finlease', {
+      down: { mode: 'pct', value: 80 },
+      residual: { mode: 'pct', value: 30 },
+    });
+    const f = financials(item);
+    expect(f.principal).toBe(8_000_000);
     expect(f.monthly).toBe(0);
+    expect(remainingDebtEach(item, 0)).toBe(f.principal);
+    expect(remainingDebtEach(item, item.months)).toBeCloseTo(f.resEach, 4);
+    expect(f.resEach).toBeLessThan(12_000_000);
+  });
+
+  it('실제 견적 월납액은 표시·현금흐름에 쓰되 계산 월납액과 금융원금은 보존', () => {
+    const baseline = financials(baseItem('oplease'));
+    const quoted = financials(baseItem('oplease', { monthlyOverride: 990_000 }));
+    expect(quoted.monthly).toBe(990_000);
+    expect(quoted.calculatedMonthly).toBeCloseTo(baseline.calculatedMonthly, 6);
+    expect(quoted.principal).toBe(baseline.principal);
+  });
+  it('실제 견적 월납액이 낮으면 그 차이를 만기 금융잔액으로 보존', () => {
+    const item = baseItem('installment', { monthlyOverride: 1 });
+    expect(remainingDebtEach(item, item.months)).toBeGreaterThan(item.vehicle.price);
+  });
+  it('VAT 공제 가능 사업용 차량의 취득세 과표는 환급 VAT를 제외', () => {
+    const truck = baseItem('installment', {
+      vehicle: { ...baseItem('installment').vehicle, category: 'truck' },
+      acqTaxRatePct: 5,
+    });
+    const f = financials(truck);
+    expect(f.acqTaxEach).toBe(Math.round((40_000_000 / 1.1) * 0.05));
+  });
+  it('장기렌트 자동 월납도 예상 잔존가치를 balloon으로 반영', () => {
+    const lowResidual = financials(baseItem('rent', { residual: { mode: 'pct', value: 20 } }));
+    const highResidual = financials(baseItem('rent', { residual: { mode: 'pct', value: 40 } }));
+    expect(highResidual.monthly).toBeLessThan(lowResidual.monthly);
   });
 });
 
@@ -61,8 +102,16 @@ describe('vatRefundCumEach — 부가세 환급 (스펙 §4.2 각주2, 케이스
 describe('sunkAt — 누적지출 (스펙 §4.3)', () => {
   it('m=0: 선납+현금추가+취득세만 (할부), 렌트는 선납만', () => {
     const inst = baseItem('installment', { down: { mode: 'amount', value: 12_000_000 } });
-    expect(sunkAt(inst, baseCommon(), 0)).toBe(12_000_000 + 2_800_000);
+    expect(sunkAt(inst, baseCommon(), 0))
+      .toBe(12_000_000 + Math.round((40_000_000 / 1.1) * 0.07));
     expect(sunkAt(baseItem('rent', { down: { mode: 'amount', value: 12_000_000 } }), baseCommon(), 0)).toBe(12_000_000);
+  });
+  it('반환형 보증금과 기타 초기비용은 초기 누적지출에 포함', () => {
+    const item = baseItem('rent', {
+      deposit: { mode: 'pct', value: 10 },
+      upfrontFee: 300_000,
+    });
+    expect(sunkAt(item, baseCommon(), 0)).toBe(4_300_000);
   });
   it('월납·연간비용·대수 반영: 2대면 정확히 2배 (tradeIn=0)', () => {
     const one = baseItem('rent', { insuranceYr: 800_000, maintenanceYr: 300_000 });
