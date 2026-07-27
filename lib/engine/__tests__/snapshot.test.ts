@@ -3,22 +3,23 @@ import { costAt } from '../snapshot';
 import { baseCommon, baseItem } from './fixtures';
 
 describe('costAt 스냅샷 (스펙 §4.6)', () => {
-  it('전 과정 손계산: 할부 금리0%·4,000만·취득세 7%·시세 2,500만 — net = 1,808만', () => {
+  it('전 과정 손계산: 할부 금리0%·4,000만·공급가 취득세 7%·시세 2,500만 — net ≈ 1,780만', () => {
     // monthly = 4,000만/48 = 833,333.33…, m=24
-    // sunk = 280만(취득세) + 833,333.33×24(=2,000만) = 2,280만
-    // settle = 2,280만 + 잔여대출 2,000만 − 시세 2,500만 = 1,780만
-    // 기회비용 = 초기현금 280만 × 5% × 2년 = 28만 → net = 1,780만 + 28만 = 1,808만
+    // 취득세 = round((4,000만/1.1)×7%) = 2,545,455원
+    // sunk = 취득세 + 833,333.33×24(=2,000만) = 22,545,455원
+    // settle = sunk + 잔여대출 2,000만 − 시세 2,500만 = 17,545,455원
+    // 기회비용 = 초기현금 2,545,455×5%×2년 = 254,545.5원 → net = 17,800,000.5원
     const item = baseItem('installment', {
       ratePct: 0,
       depreciation: { depRatePct: 15, floorPct: 25, resaleOverrides: [{ atMonths: 24, price: 25_000_000 }] },
     });
     const s = costAt(item, baseCommon({ assetReturnPct: 5 }), 24);
-    expect(s.sunk).toBeCloseTo(22_800_000, 0);
-    expect(s.bestExit.cost).toBeCloseTo(17_800_000, 0);
-    expect(s.initialCash).toBeCloseTo(2_800_000, 0);
-    expect(s.oppCost).toBeCloseTo(280_000, 0);
+    expect(s.sunk).toBeCloseTo(22_545_455, 0);
+    expect(s.bestExit.cost).toBeCloseTo(17_545_455, 0);
+    expect(s.initialCash).toBeCloseTo(2_545_455, 0);
+    expect(s.oppCost).toBeCloseTo(254_545.5, 1);
     expect(s.taxSaving).toBe(0); // 비사업자
-    expect(s.netCost).toBeCloseTo(18_080_000, 0);
+    expect(s.netCost).toBeCloseTo(17_800_000.5, 1);
   });
 
   it('배선 검증: netCost = bestExit.cost − taxSaving + oppCost', () => {
@@ -34,8 +35,9 @@ describe('costAt 스냅샷 (스펙 §4.6)', () => {
       acqTaxRatePct: 5,
     });
     const s = costAt(item, baseCommon({ biz: 'personal', assetReturnPct: 5 }), 12);
-    // 초기현금 = 선납 1,200만 + 취득세 200만 − 환급 363.6만
-    expect(s.initialCash).toBeCloseTo(12_000_000 + 2_000_000 - 40_000_000 * (10 / 110), 0);
+    // 초기현금 = 선납 1,200만 + VAT 제외 과표 취득세 − 환급 363.6만
+    const acquisitionTax = Math.round((40_000_000 / 1.1) * 0.05);
+    expect(s.initialCash).toBeCloseTo(12_000_000 + acquisitionTax - 40_000_000 * (10 / 110), 0);
   });
 
   it('m=0: 기회비용 0, 절감 0', () => {

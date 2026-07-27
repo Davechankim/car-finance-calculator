@@ -17,7 +17,14 @@ export function costAt(item: FinanceItem, common: CommonProfile, mRaw: number): 
 
   const initRefundEach = vatRefundCumEach(item, common, 0); // fin/inst 초기 환급, rent는 0
   const initialCash =
-    (f.downEach + f.cashExtraEach + f.acqTaxEach - initRefundEach) * count - common.tradeIn;
+    (
+      f.downEach +
+      f.depositEach +
+      f.cashExtraEach +
+      f.acqTaxEach +
+      item.upfrontFee -
+      initRefundEach
+    ) * count - common.tradeIn;
   const oppCost = initialCash * (common.assetReturnPct / 100) * yrs;
 
   return {
