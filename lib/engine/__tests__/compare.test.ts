@@ -15,7 +15,7 @@ const state = (over: Partial<ComparisonState> = {}): ComparisonState => ({
 });
 
 describe('compareAll (스펙 §5)', () => {
-  it('그리드: 0~최장기간(72), 3개월 단위, 끝점 포함', () => {
+  it('그리드: 목표·시나리오·계약/금융기간 중 최장(72), 3개월 단위, 끝점 포함', () => {
     const r = compareAll(state());
     expect(r.horizon).toBe(72);
     expect(r.gridMonths[0]).toBe(0);
@@ -57,7 +57,7 @@ describe('compareAll (스펙 §5)', () => {
     expect(row.bestItemId).toBe(min.itemId);
   });
 
-  it('시나리오 최저 항목은 이미 만료된 계약을 제외하고, 모두 만료되면 null', () => {
+  it('시나리오 최저 항목은 만료된 계약을 제외하되 소유형은 금융 만기 후에도 포함', () => {
     const st = state({
       common: baseCommon({
         scenarios: [
@@ -69,7 +69,18 @@ describe('compareAll (스펙 §5)', () => {
     const r = compareAll(st);
     expect(r.scenarioRows[0].cells.find((c) => c.itemId === 'a')!.snapshot.ended).toBe(true);
     expect(r.scenarioRows[0].bestItemId).toBe('b');
-    expect(r.scenarioRows[1].bestItemId).toBeNull();
+    expect(r.scenarioRows[1].cells.find((c) => c.itemId === 'b')!.snapshot.ended).toBe(false);
+    expect(r.scenarioRows[1].cells.find((c) => c.itemId === 'b')!.snapshot.m).toBe(90);
+    expect(r.scenarioRows[1].bestItemId).toBe('b');
+
+    const onlyExpiredContracts = compareAll({
+      common: baseCommon({ scenarios: [{ atMonths: 90, label: '7년 6개월 후' }] }),
+      items: [
+        baseItem('rent', { id: 'rent', months: 48 }),
+        baseItem('oplease', { id: 'op', months: 72 }),
+      ],
+    });
+    expect(onlyExpiredContracts.scenarioRows[0].bestItemId).toBeNull();
   });
 
   it('항목 0개 → 빈 결과, 1개 → 단독 분석', () => {
@@ -80,7 +91,7 @@ describe('compareAll (스펙 §5)', () => {
     expect(r.series[0].itemId).toBe('x');
   });
 
-  it('3개월 그리드 밖인 모든 항목의 정확한 만기점도 차트·표·bestPoint에 포함한다', () => {
+  it('3개월 그리드 밖인 금융 만기점도 포함하고 소유형 bestPoint는 명시 분석기간까지만 탐색', () => {
     const odd = baseItem('installment', { id: 'odd', months: 55 });
     const r = compareAll({
       common: baseCommon(),
@@ -88,10 +99,49 @@ describe('compareAll (스펙 §5)', () => {
     });
     expect(r.gridMonths).toContain(55);
     const s = r.series.find((x) => x.itemId === 'odd')!;
-    const gridCandidates = r.gridMonths.filter((m) => m >= 3 && m <= 55);
+    const analysisEnd = 55;
+    const gridCandidates = r.gridMonths.filter((m) => m >= 3 && m <= analysisEnd);
     const manualMin = Math.min(...gridCandidates.map((m) => costAt(odd, baseCommon(), m).netCost));
     expect(s.bestPoint.netCost).toBeCloseTo(manualMin, 4);
-    expect(s.bestPoint.m).toBeLessThanOrEqual(55);
+    expect(s.bestPoint.m).toBeLessThanOrEqual(analysisEnd);
+  });
+
+  it('목표 보유기간이 금융기간보다 길면 소유형 시계열을 계속 계산', () => {
+    const owned = baseItem('installment', { id: 'owned', months: 36 });
+    const contract = baseItem('rent', { id: 'contract', months: 36 });
+    const r = compareAll({
+      common: baseCommon({ targetMonths: 60 }),
+      items: [owned, contract],
+    });
+    const owned60 = r.series[0].points.find((point) => point.m === 60)!;
+    const contract60 = r.series[1].points.find((point) => point.m === 60)!;
+    expect(r.horizon).toBe(60);
+    expect(owned60.ended).toBe(false);
+    expect(contract60.ended).toBe(true);
+    expect(costAt(owned, baseCommon(), 60).m).toBe(60);
+    expect(contract60.netCost)
+      .toBe(r.series[1].points.find((point) => point.m === 36)!.netCost);
+  });
+
+  it('3개월 그리드 밖 목표에도 무관한 장기 계약 추가 전후 소유형 bestPoint가 같음', () => {
+    const common = baseCommon({ targetMonths: 55 });
+    const owned = baseItem('installment', {
+      id: 'owned',
+      months: 36,
+      depreciation: {
+        ...baseItem('installment').depreciation,
+        resaleOverrides: [{ atMonths: 55, price: 50_000_000 }],
+      },
+    });
+    const base = compareAll({ common, items: [owned] });
+    const withLongContract = compareAll({
+      common,
+      items: [owned, baseItem('rent', { id: 'long-rent', months: 120 })],
+    });
+    expect(base.series[0].bestPoint.m).toBe(55);
+    expect(withLongContract.horizon).toBe(120);
+    expect(withLongContract.gridMonths).toContain(55);
+    expect(withLongContract.series[0].bestPoint).toEqual(base.series[0].bestPoint);
   });
 });
 

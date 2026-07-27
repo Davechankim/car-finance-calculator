@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  exitOptionsAt, financials, remainingDebtEach, sunkAt,
+  exitOptionsAt, financials, ownershipMaturityNetOutflowEach,
+  remainingDebtEach, sunkAt,
 } from '../costAt';
 import { monthlyRate, remBal } from '../pmt';
 import { baseCommon, baseItem } from './fixtures';
@@ -53,8 +54,39 @@ describe('exitOptionsAt (스펙 §4.4)', () => {
     const r48 = exitOptionsAt(item, common, 48);
     const resale48 = 40_000_000 * 0.85 ** 4; // 20,880,250
     expect(remainingDebtEach(item, 48)).toBeCloseTo(12_000_000, 4);
+    expect(ownershipMaturityNetOutflowEach(item)).toBeCloseTo(12_000_000, 4);
     expect(r48.options.find((o) => o.kind === 'settleSell')!.cost)
-      .toBeCloseTo(sunkAt(item, common, 48) + 12_000_000 - resale48, 0);
+      .toBeCloseTo(sunkAt(item, common, 48) - resale48, 0);
+  });
+
+  it('금융리스 만기 잔존정산·보증금 반환은 한 번만 반영하고 이후 시세로 매각', () => {
+    const item = baseItem('finlease', {
+      months: 36,
+      deposit: { mode: 'amount', value: 5_000_000 },
+      exit: {
+        ...baseItem('finlease').exit,
+        earlyDiscount: 1_000_000,
+        buyoutFee: 300_000,
+      },
+    });
+    const debtAtMaturity = remainingDebtEach(item, item.months);
+    const settlementNet = debtAtMaturity + 300_000 - 5_000_000;
+
+    const at36 = exitOptionsAt(item, common, 36);
+    const at60 = exitOptionsAt(item, common, 60);
+    const exit36 = at36.options.find((option) => option.kind === 'settleSell')!;
+    const exit60 = at60.options.find((option) => option.kind === 'settleSell')!;
+
+    const f = financials(item);
+    expect(ownershipMaturityNetOutflowEach(item)).toBeCloseTo(settlementNet, 4);
+    expect(sunkAt(item, common, 36) - sunkAt(item, common, 35))
+      .toBeCloseTo(f.monthly + settlementNet, 4);
+    expect(sunkAt(item, common, 60) - sunkAt(item, common, 36)).toBe(0);
+    expect(exit36.cost).toBeCloseTo(sunkAt(item, common, 36) - at36.resaleEach, 4);
+    expect(exit60.cost).toBeCloseTo(sunkAt(item, common, 60) - at60.resaleEach, 4);
+    expect(at60.resaleEach).toBeLessThan(at36.resaleEach);
+    expect(exit36.label).toBe('만기정산 후 매각');
+    expect(exit60.label).toBe('보유차량 매각 (만기정산 반영)');
   });
 
   it('케이스 E: 할부 24개월, 시세 2,500만 > 잔여대출 → 매각차익이 누적지출 상쇄(음수 가능)', () => {

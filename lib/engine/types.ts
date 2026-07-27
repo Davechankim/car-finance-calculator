@@ -57,7 +57,7 @@ export interface FinanceItem {
   label?: string;
   method: Method;
   vehicle: Vehicle;
-  months: number;
+  months: number;                    // rent/oplease 계약기간, finlease/installment 금융기간
   ratePct: number;
   down: ModeValue;                // 1대당 선납금
   deposit: ModeValue | null;      // 1대당 반환형 보증금 (rent/lease)
@@ -81,7 +81,7 @@ export interface ExitOption { kind: ExitKind; label: string; cost: number }
 
 export interface CostSnapshot {
   m: number;
-  ended: boolean;          // m이 계약기간을 넘어 만기 값으로 고정됨
+  ended: boolean;          // rent/oplease가 계약기간을 넘어 만기 값으로 고정됨
   monthly: number;         // 1대당 월납입금
   principal: number;       // 1대당 최초 금융잔액
   sunk: number;            // 항목 전체 누적지출 (×count, tradeIn·부가세환급 반영)
@@ -100,4 +100,9 @@ export interface CostSnapshot {
 export function resolveAmount(mv: ModeValue | null, base: number): number {
   if (!mv) return 0;
   return mv.mode === 'pct' ? Math.round(base * (mv.value / 100)) : mv.value;
+}
+
+/** 금융 만기 뒤에도 차량을 계속 보유할 수 있는 방식. */
+export function isOwnershipMethod(method: Method): boolean {
+  return method === 'finlease' || method === 'installment';
 }

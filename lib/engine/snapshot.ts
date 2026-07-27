@@ -1,11 +1,15 @@
-// lib/engine/snapshot.ts — 시점 m의 종합 스냅샷 (스펙 §4.6, §5 만기 고정)
-import { exitOptionsAt, financials, sunkAt, vatRefundCumEach } from './costAt';
+// lib/engine/snapshot.ts — 시점 m의 종합 스냅샷 (스펙 §4.6, §5 방식별 만기 처리)
+import {
+  effectiveMonthAt, exitOptionsAt, financials, ownershipMaturityNetOutflowEach,
+  sunkAt, vatRefundCumEach,
+} from './costAt';
 import { deductibleAt, taxSavingAt } from './tax';
 import type { CommonProfile, CostSnapshot, FinanceItem } from './types';
+import { isOwnershipMethod } from './types';
 
 export function costAt(item: FinanceItem, common: CommonProfile, mRaw: number): CostSnapshot {
-  const m = Math.min(Math.max(mRaw, 0), item.months);
-  const ended = mRaw > item.months;
+  const m = effectiveMonthAt(item, mRaw);
+  const ended = !isOwnershipMethod(item.method) && mRaw > item.months;
   const f = financials(item);
   const count = item.vehicle.count;
   const yrs = m / 12;
@@ -25,7 +29,14 @@ export function costAt(item: FinanceItem, common: CommonProfile, mRaw: number): 
       item.upfrontFee -
       initRefundEach
     ) * count - common.tradeIn;
-  const oppCost = initialCash * (common.assetReturnPct / 100) * yrs;
+  const returnRate = common.assetReturnPct / 100;
+  const postFinanceYears =
+    isOwnershipMethod(item.method)
+      ? Math.max(m - item.months, 0) / 12
+      : 0;
+  const maturityCashOppCost =
+    ownershipMaturityNetOutflowEach(item) * count * returnRate * postFinanceYears;
+  const oppCost = initialCash * returnRate * yrs + maturityCashOppCost;
 
   return {
     m, ended,

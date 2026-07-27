@@ -6,6 +6,7 @@ import {
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
+import { isOwnershipMethod } from '@/lib/engine/types';
 import { itemTitle } from '@/lib/state/defaults';
 import { itemColor } from './palette';
 
@@ -13,7 +14,7 @@ export function TimelineTab(props: { state: ComparisonState; result: CompareResu
   const { state, result } = props;
   if (result.series.length === 0) return <div className="card">비교 항목을 추가하세요.</div>;
 
-  // 행: { m, a0: 진행값, e0: 만기후값, a1: …, … }
+  // 행: { m, a0: 진행값, e0: 계약 종료 후 고정값, a1: …, … }
   const rows = result.gridMonths.map((m) => {
     const row: Record<string, number | null> = { m };
     result.series.forEach((s, i) => {
@@ -21,10 +22,12 @@ export function TimelineTab(props: { state: ComparisonState; result: CompareResu
       row[`a${i}`] = p.ended ? null : p.netCost;
       row[`e${i}`] = p.ended ? p.netCost : null;
     });
-    // 점선이 실선 끝점에서 이어지도록 만기점은 양쪽에 넣는다
+    // 렌트·운용리스 점선이 실선 끝점에서 이어지도록 만기점은 양쪽에 넣는다.
     result.series.forEach((s, i) => {
       const item = state.items[i];
-      if (m === item.months) row[`e${i}`] = row[`a${i}`];
+      if (!isOwnershipMethod(item.method) && m === item.months) {
+        row[`e${i}`] = row[`a${i}`];
+      }
     });
     return row;
   });
@@ -49,7 +52,7 @@ export function TimelineTab(props: { state: ComparisonState; result: CompareResu
               return [
                 <Line key={`a${i}`} dataKey={`a${i}`} name={itemTitle(item, i)}
                   stroke={color} strokeWidth={2} dot={false} connectNulls={false} />,
-                <Line key={`e${i}`} dataKey={`e${i}`} name={`${itemTitle(item, i)} (만기 후)`}
+                <Line key={`e${i}`} dataKey={`e${i}`} name={`${itemTitle(item, i)} (계약 종료)`}
                   stroke={color} strokeWidth={1.5} strokeDasharray="4 4" dot={false}
                   legendType="none" connectNulls={false} />,
                 <ReferenceDot key={`b${i}`} x={s.bestPoint.m} y={s.bestPoint.netCost}
@@ -77,20 +80,32 @@ export function TimelineTab(props: { state: ComparisonState; result: CompareResu
                 return (
                   <tr key={m}>
                     <td>{m}개월</td>
-                    {vals.map((p, i) => (
-                      <td key={i} className={p.netCost === min ? 'best' : ''}>
-                        {fmtMan(p.netCost)}원{p.ended ? <span className="muted"> 종료</span> : ''}
-                      </td>
-                    ))}
+                    {vals.map((p, i) => {
+                      const item = state.items[i];
+                      const postFinance =
+                        isOwnershipMethod(item.method) && m > item.months;
+                      return (
+                        <td key={i} className={p.netCost === min ? 'best' : ''}>
+                          {fmtMan(p.netCost)}원
+                          {p.ended && <span className="muted"> 계약 종료</span>}
+                          {postFinance && <span className="muted"> 금융 종료·보유 중</span>}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <p className="muted">항목별 최적: {result.series.map((s, i) =>
-          `${itemTitle(state.items[i], i)} → ${s.bestPoint.m}개월 (${fmtMan(s.bestPoint.netCost)}원, ${s.bestPoint.exitLabel})`,
-        ).join(' / ')}</p>
+        <p className="muted">
+          금융리스·할부는 금융기간 후에도 실선으로 이어지며 월 금융납입을 제외한
+          보유비용·세금·시세가 계속 반영됩니다. 장기렌트·운용리스의 점선은 계약 종료 값입니다.
+          <br />
+          항목별 최적: {result.series.map((s, i) =>
+            `${itemTitle(state.items[i], i)} → ${s.bestPoint.m}개월 (${fmtMan(s.bestPoint.netCost)}원, ${s.bestPoint.exitLabel})`,
+          ).join(' / ')}
+        </p>
       </div>
     </>
   );

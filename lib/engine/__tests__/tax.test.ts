@@ -121,6 +121,25 @@ describe('annualInterestAt / deductibleAt — 항목 조립', () => {
     expect(deductibleAt(item, common, 72).depEquiv).toBe(0);
     expect(taxSavingAt(item, common, 72)).toBeCloseTo(taxSavingAt(item, common, 60), 4);
   });
+  it('36개월 금융 종료 후에도 60개월까지 감가·보험·정비 세금효과를 계속 계산', () => {
+    const item = baseItem('installment', {
+      months: 36,
+      ratePct: 0,
+      insuranceYr: 1_200_000,
+      maintenanceYr: 600_000,
+    });
+    const common = baseCommon({ biz: 'personal', revenueIndex: 2 });
+    const basis = 40_000_000 + financials(item).acqTaxEach;
+
+    expect(deductibleAt(item, common, 48).depEquiv)
+      .toBeCloseTo(basis / 5, 4);
+    expect(deductibleAt(item, common, 48).annualCost)
+      .toBeCloseTo(basis / 5 + 1_800_000, 4);
+    expect(deductibleAt(item, common, 72).depEquiv).toBe(0);
+    expect(deductibleAt(item, common, 72).annualCost).toBeCloseTo(1_800_000, 4);
+    expect(taxSavingAt(item, common, 60)).toBeGreaterThan(taxSavingAt(item, common, 36));
+    expect(taxSavingAt(item, common, 72)).toBeGreaterThan(taxSavingAt(item, common, 60));
+  });
   it('VAT 환급 차량은 공급가액만 감가상각 basis로 사용', () => {
     const item = baseItem('installment', {
       vehicle: { ...baseItem('installment').vehicle, category: 'truck' },
