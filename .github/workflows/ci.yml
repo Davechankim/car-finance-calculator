@@ -45,6 +45,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Verify Sites build
+        run: npm run verify:sites-build
+
   browser-e2e:
     name: Browser E2E
     runs-on: ubuntu-latest
