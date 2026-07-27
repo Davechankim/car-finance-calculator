@@ -23,8 +23,10 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
 
   const parts: { label: string; value: number }[] = [
     { label: '선납금', value: f.downEach * count },
+    { label: '반환형 보증금', value: f.depositEach * count },
     { label: '현금 추가 (할부)', value: f.cashExtraEach * count },
     { label: '취득세', value: f.acqTaxEach * count },
+    { label: '기타 초기비용', value: item.upfrontFee * count },
     { label: `누적 납입 (${s.m}개월)`, value: f.monthly * s.m * count },
     { label: '보험·정비 누적', value: (item.insuranceYr + item.maintenanceYr) * (s.m / 12) * count },
     { label: '보상판매 차감', value: -state.common.tradeIn },
@@ -40,11 +42,12 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
       <h3>비용 구성 분해</h3>
       <div className="row">
         <Chips
+          ariaLabel="상세 비교 항목"
           value={String(Math.min(sel, state.items.length - 1))}
           options={state.items.map((it, i) => ({ key: String(i), label: itemTitle(it, i) }))}
           onChange={(k) => setSel(Number(k))}
         />
-        <NumInput label="시점" suffix="개월" step={3} min={0} max={item.months} value={effM}
+        <NumInput label="시점" suffix="개월" step={3} min={0} max={item.months} integer value={effM}
           onChange={(v) => setM(Math.min(v, item.months))} />
       </div>
       {parts.map((p) => (
@@ -65,7 +68,8 @@ export function DetailTab(props: { state: ComparisonState; result: CompareResult
         실질순비용 = {fmtMan(s.netCost)}원 {s.ended ? '(만기 고정)' : ''}
       </div>
       <p className="muted">
-        월납 {fmtMan(s.monthly)}원/대 · 원금 {fmtMan(s.principal)}원/대 · 시세 {fmtMan(s.resaleEach)}원/대 ·
+        월납 {fmtMan(s.monthly)}원/대{item.monthlyOverride != null ? ' (실제 견적)' : ''} ·
+        최초 금융잔액 {fmtMan(s.principal)}원/대 · 시세 {fmtMan(s.resaleEach)}원/대 ·
         연 인정액 {fmtMan(s.annualDeductible)}원/대
       </p>
     </div>

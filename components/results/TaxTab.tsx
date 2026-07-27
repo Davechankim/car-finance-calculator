@@ -1,6 +1,8 @@
 'use client';
 import { deductibleAt, taxSavingAt } from '@/lib/engine/tax';
-import { isExempt, marginalRate } from '@/lib/engine/taxData';
+import {
+  annualCostLimit, annualDepLimit, isExempt, marginalRate,
+} from '@/lib/engine/taxData';
 import { fmtMan } from '@/lib/format';
 import type { CompareResult } from '@/lib/engine/compare';
 import type { ComparisonState } from '@/lib/engine/types';
@@ -14,7 +16,7 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
   const mr = marginalRate(state.common);
   return (
     <div className="card">
-      <h3>비용 인정 계산 과정 (각 항목 만기 기준 · 1대당 연간)</h3>
+      <h3>비용 인정 계산 과정 (각 항목 만기의 마지막 과세기간 · 1대당 연환산)</h3>
       <div style={{ overflowX: 'auto' }}>
         <table className="cmp">
           <thead>
@@ -37,7 +39,9 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
                   <td>{fmtMan(b.usedAmount)}원</td>
                   <td>{b.depExcess > 0 ? `−${fmtMan(b.depExcess)}원` : '—'}</td>
                   <td>{fmtMan(b.recognizedEach)}원</td>
-                  <td className="best">{fmtMan(saving)}원</td>
+                  <td>
+                    {b.complianceBlocked ? '필수요건 미충족 · 0원' : `${fmtMan(saving)}원`}
+                  </td>
                 </tr>
               );
             })}
@@ -46,7 +50,10 @@ export function TaxTab(props: { state: ComparisonState; result: CompareResult })
       </div>
       <p className="muted" style={{ marginTop: 8 }}>
         한계세율 {Math.round(mr * 1000) / 10}% 적용 (누진공제 미반영 근사) ·
-        한도제외 차량은 전액 인정 · 승용차는 연 1,500만(기록부 작성 시 업무비율)·감가 800만 한도 (대당)
+        한도제외 차량은 입력 업무비율 적용 (미입력 시 100% 업무사용 가정) ·
+        승용차는 연 {fmtMan(annualCostLimit(state.common))}원
+        (기록부 작성 시 업무비율)·감가 {fmtMan(annualDepLimit(state.common))}원 한도 (대당) ·
+        세금절감 열은 계약 전체 누적액
       </p>
     </div>
   );

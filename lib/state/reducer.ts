@@ -1,8 +1,14 @@
 // lib/state/reducer.ts — 단일 스토어 액션 (스펙 §6.2)
-import type { CommonProfile, ComparisonState, FinanceItem } from '@/lib/engine/types';
+import type {
+  CommonProfile, ComparisonState, FinanceItem, Scenario,
+} from '@/lib/engine/types';
 
 export type Action =
   | { type: 'setCommon'; patch: Partial<CommonProfile> }
+  | { type: 'addScenario'; scenario: Scenario }
+  | { type: 'updateScenario'; index: number; scenario: Scenario }
+  | { type: 'removeScenario'; index: number }
+  | { type: 'replaceState'; state: ComparisonState }
   | { type: 'addItem'; item: FinanceItem }
   | { type: 'replaceItem'; item: FinanceItem }
   | { type: 'duplicateItem'; id: string; newId: string }
@@ -10,8 +16,58 @@ export type Action =
 
 export function reducer(state: ComparisonState, action: Action): ComparisonState {
   switch (action.type) {
+    case 'replaceState':
+      return action.state;
     case 'setCommon':
       return { ...state, common: { ...state.common, ...action.patch } };
+    case 'addScenario':
+      return {
+        ...state,
+        common: {
+          ...state.common,
+          scenarios: [...state.common.scenarios, action.scenario],
+        },
+      };
+    case 'updateScenario': {
+      const previous = state.common.scenarios[action.index];
+      if (!previous) return state;
+      const scenarios = state.common.scenarios.map((scenario, index) =>
+        index === action.index ? action.scenario : scenario);
+      const items = state.items.map((item) => {
+        const moved = item.depreciation.resaleOverrides
+          .find((override) => override.atMonths === previous.atMonths);
+        if (!moved) return item;
+        const resaleOverrides = item.depreciation.resaleOverrides
+          .filter((override) =>
+            override.atMonths !== previous.atMonths &&
+            override.atMonths !== action.scenario.atMonths);
+        resaleOverrides.push({ ...moved, atMonths: action.scenario.atMonths });
+        return {
+          ...item,
+          depreciation: { ...item.depreciation, resaleOverrides },
+        };
+      });
+      return { ...state, common: { ...state.common, scenarios }, items };
+    }
+    case 'removeScenario': {
+      const removed = state.common.scenarios[action.index];
+      if (!removed) return state;
+      return {
+        ...state,
+        common: {
+          ...state.common,
+          scenarios: state.common.scenarios.filter((_, index) => index !== action.index),
+        },
+        items: state.items.map((item) => ({
+          ...item,
+          depreciation: {
+            ...item.depreciation,
+            resaleOverrides: item.depreciation.resaleOverrides
+              .filter((override) => override.atMonths !== removed.atMonths),
+          },
+        })),
+      };
+    }
     case 'addItem':
       return { ...state, items: [...state.items, action.item] };
     case 'replaceItem':
@@ -26,7 +82,7 @@ export function reducer(state: ComparisonState, action: Action): ComparisonState
       const copy: FinanceItem = {
         ...structuredClone(src),
         id: action.newId,
-        label: src.label ? `${src.label} (복제)` : undefined,
+        label: src.label ? `${src.label.slice(0, 95)} (복제)` : undefined,
       };
       const items = [...state.items];
       items.splice(idx + 1, 0, copy);

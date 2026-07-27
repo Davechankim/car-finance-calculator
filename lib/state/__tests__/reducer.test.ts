@@ -8,7 +8,7 @@ describe('defaults (스펙 §6.3)', () => {
     expect(newItem('oplease').ratePct).toBe(4.5);
     expect(newItem('finlease').ratePct).toBe(5.0);
     expect(newItem('installment').ratePct).toBe(5.5);
-    expect(newItem('rent').residual).toBeNull();
+    expect(newItem('rent').residual).toEqual({ mode: 'pct', value: 30 });
     expect(newItem('oplease').residual).toEqual({ mode: 'pct', value: 30 });
     expect(newItem('finlease').residual).toEqual({ mode: 'pct', value: 30 });
     expect(newItem('rent').insuranceYr).toBe(0); // 렌트는 보험 포함
@@ -35,11 +35,13 @@ describe('reducer (스펙 §6.2)', () => {
     expect(s.items).toHaveLength(4);
     expect(s.items[3].method).toBe('finlease');
 
-    const target = s.items[0];
+    const target = { ...s.items[0], label: '가'.repeat(100) };
+    s = reducer(s, { type: 'replaceItem', item: target });
     s = reducer(s, { type: 'duplicateItem', id: target.id, newId: nextId() });
     expect(s.items).toHaveLength(5);
     expect(s.items[1].method).toBe(target.method); // 복제는 원본 바로 뒤
     expect(s.items[1].id).not.toBe(target.id);
+    expect(s.items[1].label).toHaveLength(100);
 
     const edited = { ...s.items[0], months: 60 };
     s = reducer(s, { type: 'replaceItem', item: edited });
@@ -55,5 +57,31 @@ describe('reducer (스펙 §6.2)', () => {
     const s1 = reducer(s0, { type: 'addItem', item });
     const s2 = reducer(s0, { type: 'addItem', item }); // 동일 액션 재적용 (이중 호출 시뮬레이션)
     expect(s1.items[s1.items.length - 1].id).toBe(s2.items[s2.items.length - 1].id); // 결정론
+  });
+  it('replaceState는 검증 완료된 프로젝트 전체를 교체한다', () => {
+    const replacement = { ...defaultState(), items: [newItem('finlease')] };
+    expect(reducer(defaultState(), { type: 'replaceState', state: replacement })).toBe(replacement);
+  });
+  it('시나리오 수정·삭제 시 연결된 예상시세도 함께 이동·삭제한다', () => {
+    let state = defaultState();
+    state.items[0].depreciation.resaleOverrides = [{ atMonths: 12, price: 25_000_000 }];
+
+    state = reducer(state, {
+      type: 'updateScenario',
+      index: 0,
+      scenario: { atMonths: 15, label: '1.3년 후' },
+    });
+    expect(state.common.scenarios[0].atMonths).toBe(15);
+    expect(state.items[0].depreciation.resaleOverrides)
+      .toEqual([{ atMonths: 15, price: 25_000_000 }]);
+
+    state = reducer(state, { type: 'removeScenario', index: 0 });
+    expect(state.items[0].depreciation.resaleOverrides).toEqual([]);
+
+    state = reducer(state, {
+      type: 'addScenario',
+      scenario: { atMonths: 9, label: '0.8년 후' },
+    });
+    expect(state.common.scenarios[state.common.scenarios.length - 1].atMonths).toBe(9);
   });
 });
