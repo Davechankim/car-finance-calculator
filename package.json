@@ -32,7 +32,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.47.0",
     "@mdx-js/rollup": "3.1.1",
-    "@next/env": "^15.5.22",
+    "@next/env": "^16.2.12",
     "@playwright/test": "1.62.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
