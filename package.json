@@ -22,7 +22,7 @@
     "release:check": "npm test && npm run tax:mcp:smoke && npm run typecheck && npm run build && npm run verify:sites-build && npm run verify:adsense-release && npm run test:e2e"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "next": "15.5.22",
     "react": "19.2.8",
     "react-dom": "19.2.8",
